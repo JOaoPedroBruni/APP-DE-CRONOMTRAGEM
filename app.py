@@ -14,13 +14,14 @@ st.title("🏎️ Plataforma de Cronometragem")
 PASTA_ETAPAS = "etapas_salvas"; os.makedirs(PASTA_ETAPAS, exist_ok=True)
 PASTA_MAPAS = "mapas"; os.makedirs(PASTA_MAPAS, exist_ok=True)
 
-# ---------------- Constantes e Funções (sem alterações) ------------------
+# ---------------- Constantes e Funções ------------------
 COL_LOCAL, COL_EVENTO = "Local", "Evento"
 COL_CAT, COL_PILOTO = "CATEGORIA", "Piloto"
 COL_VOLTA, COL_TT = "Volta", "Tempo Total da Volta"
 COL_S1, COL_S2, COL_S3 = "Setor 1", "Setor 2", "Setor 3"
 COL_VEL = "TOP SPEED"; COLS_TEMPO = [COL_TT, COL_S1, COL_S2, COL_S3]
 EXTS_MAPA = (".png", ".jpg", ".jpeg", ".svg", ".gif")
+
 def parse_tempo(txt):
     if pd.isna(txt): return pd.NaT
     s = str(txt).strip().replace(',', '.');
@@ -47,7 +48,11 @@ def formatar_diff_span(td_or_float, unit=""):
 def normalizar(df):
     for c in COLS_TEMPO:
         if c in df.columns: df[c] = df[c].apply(parse_tempo)
+    # CORREÇÃO PARA GRÁFICO: Garantir que a velocidade seja sempre numérica
+    if COL_VEL in df.columns:
+        df[COL_VEL] = pd.to_numeric(df[COL_VEL], errors='coerce')
     return df
+
 def ler_csv_auto(src):
     try: df = pd.read_csv(src, sep=';', encoding='windows-1252', low_memory=False)
     except: df = pd.read_csv(src, sep=';', low_memory=False)
@@ -120,12 +125,11 @@ if not df_final.empty:
 tab_titles = ["Comparativo Visual", "Geral", "Volta Rápida", "Velocidade", "Gráficos", "Histórico", "Exportar"]
 tabs = st.tabs(tab_titles)
 
-# ===== ABA "COMPARATIVO VISUAL" - TOTALMENTE REFEITA COM AS CORREÇÕES =====
+# ===== ABA "COMPARATIVO VISUAL" - COM DESTAQUE ROXO INTELIGENTE =====
 with tabs[0]:
     st.header("📊 Comparativo Visual")
     if len(sel_p) < 2:
         st.warning("⚠️ Por favor, selecione de 2 a 5 pilotos na barra lateral para fazer a comparação."); st.stop()
-
     col1, col2 = st.columns(2)
     with col1:
         tipo_analise = st.radio("Tipo de Análise:", ("Tempo de Volta", "Velocidade Máxima"), horizontal=True, key="tipo_analise")
@@ -133,25 +137,22 @@ with tabs[0]:
         opcoes_referencia = ["-- Comparação Sequencial --"] + sel_p
         modo_comparacao = st.selectbox("Modo de Comparação:", opcoes_referencia, key="modo_comp")
     st.markdown("---")
-
     coluna_dado = COL_TT if tipo_analise == "Tempo de Volta" else COL_VEL
     unidade = "" if tipo_analise == "Tempo de Volta" else "km/h"
     y_label = "Tempo de Volta (M:SS)" if tipo_analise == "Tempo de Volta" else f"Velocidade Máxima ({unidade})"
-
     dados_pilotos = [df_final[df_final[COL_PILOTO] == p][[COL_VOLTA, coluna_dado]].set_index(COL_VOLTA).rename(columns={coluna_dado: p}) for p in sel_p]
     df_comp = dados_pilotos[0] if dados_pilotos else pd.DataFrame()
     if len(dados_pilotos) > 1:
         for i in range(1, len(dados_pilotos)): df_comp = df_comp.join(dados_pilotos[i], how='outer')
     if not df_comp.empty:
         df_comp = df_comp.sort_index().reset_index()
-
     fig, ax = plt.subplots(figsize=(12, 6))
     if tipo_analise == "Tempo de Volta":
         def format_yticks(seconds, pos): return f'{int(seconds // 60)}:{int(seconds % 60):02d}'
         ax.yaxis.set_major_formatter(mticker.FuncFormatter(format_yticks))
-    
+    else:
+        ax.yaxis.set_major_locator(mticker.MaxNLocator(integer=True, nbins=10))
     piloto_referencia = modo_comparacao if modo_comparacao != "-- Comparação Sequencial --" else None
-    
     for p in sel_p:
         piloto_df_plot = df_final[df_final[COL_PILOTO] == p].sort_values(by=COL_VOLTA)
         dados_y = piloto_df_plot[coluna_dado].dt.total_seconds() if tipo_analise == "Tempo de Volta" else piloto_df_plot[coluna_dado]
@@ -159,18 +160,14 @@ with tabs[0]:
             ax.plot(piloto_df_plot[COL_VOLTA], dados_y.dropna(), marker='o', markersize=7, linewidth=3, linestyle='--', label=f"{p} (Ref.)", zorder=10)
         else:
             ax.plot(piloto_df_plot[COL_VOLTA], dados_y.dropna(), marker='o', markersize=6, linewidth=2, label=p, alpha=0.8)
-
     ax.set_xlabel("Volta"); ax.set_ylabel(y_label); ax.set_title(f"Comparativo de {tipo_analise}")
     ax.legend(fontsize='small'); ax.grid(True, which='both', linestyle='--', linewidth=0.5)
     if not df_final.empty: ax.set_xticks(sorted(df_final[COL_VOLTA].dropna().unique().astype(int)))
     st.pyplot(fig, use_container_width=True)
     st.markdown("---")
-    
     st.subheader(f"Análise Detalhada: {tipo_analise}")
-    # CORREÇÃO: CSS foi movido para fora do loop e garantido que será sempre incluído
-    common_css = """<style> .table-container { overflow-x: auto; } .comp-table { width: 100%; border-collapse: collapse; font-size: 0.9em; } .comp-table th, .comp-table td { padding: 6px 8px; text-align: center; white-space: nowrap; } .comp-table th { font-family: sans-serif; border-bottom: 2px solid #444; } .comp-table td { border-bottom: 1px solid #333; line-height: 1.3; } .comp-table tr:hover td { background-color: #2e2e2e; } .comp-table b { font-size: 1.1em; } .diff-span { font-size: 0.9em; display: block; } .diff-pos { color: #ff4d4d !important; } .diff-neg { color: #4dff4d !important; } .diff-zero { color: #888; } .fastest-lap { background-color: #483D8B; border-radius: 4px; } </style>"""
+    common_css = """<style> .table-container { overflow-x: auto; } .comp-table { width: 100%; border-collapse: collapse; font-size: 0.9em; } .comp-table th, .comp-table td { padding: 6px 8px; text-align: center; white-space: nowrap; } .comp-table th { font-family: sans-serif; border-bottom: 2px solid #444; } .comp-table td { border-bottom: 1px solid #333; line-height: 1.3; } .comp-table tr:hover td { background-color: #2e2e2e; } .comp-table b { font-size: 1.1em; } .diff-span { font-size: 0.9em; display: block; } .diff-pos { color: #ff4d4d !important; } .diff-neg { color: #4dff4d !important; } .diff-zero { color: #888; } .best-value { background-color: #483D8B; border-radius: 4px; } </style>"""
     html = f"{common_css}<div class='table-container'><table class='comp-table'><thead><tr>"
-
     if not piloto_referencia: # Modo Sequencial
         for i, p in enumerate(sel_p):
             html += f"<th>{p}</th>";
@@ -178,17 +175,21 @@ with tabs[0]:
     else: # Modo Referência
         for p in sel_p: html += f"<th>{p}</th>"
     html += "</tr></thead><tbody>"
-
     if not df_comp.empty:
-        fastest_laps = {p: df_final[df_final[COL_PILOTO] == p][coluna_dado].min() for p in sel_p if not df_final[df_final[COL_PILOTO] == p].empty}
+        # CORREÇÃO: Lógica para pegar melhor valor (min para tempo, max para velocidade)
+        best_values = {}
+        if tipo_analise == "Tempo de Volta":
+            best_values = {p: df_final[df_final[COL_PILOTO] == p][coluna_dado].min() for p in sel_p if not df_final[df_final[COL_PILOTO] == p].empty}
+        else: # Velocidade Máxima
+            best_values = {p: df_final[df_final[COL_PILOTO] == p][coluna_dado].max() for p in sel_p if not df_final[df_final[COL_PILOTO] == p].empty}
+            
         for _, row in df_comp.iterrows():
             html += "<tr>"
             if not piloto_referencia: # Modo Sequencial
                 for i, p in enumerate(sel_p):
                     dado_atual = row.get(p)
-                    is_fastest = fastest_laps.get(p) and pd.notna(dado_atual) and dado_atual == fastest_laps.get(p)
-                    cell_class = "fastest-lap" if is_fastest and tipo_analise == "Tempo de Volta" else ""
-                    # CORREÇÃO: Verificação de NaN para velocidade
+                    is_best = best_values.get(p) and pd.notna(dado_atual) and dado_atual == best_values.get(p)
+                    cell_class = "best-value" if is_best else ""
                     valor_str = fmt_tempo(dado_atual) if tipo_analise == "Tempo de Volta" else (f"{dado_atual:.1f}" if pd.notna(dado_atual) else "---")
                     html += f"<td class='{cell_class}'><b>{row[COL_VOLTA]}</b><br>{valor_str} {unidade}</td>"
                     if i < len(sel_p) - 1:
@@ -202,16 +203,15 @@ with tabs[0]:
                     if p != piloto_referencia:
                         diff = dado_atual - dado_ref if pd.notna(dado_atual) and pd.notna(dado_ref) else None
                         diff_str = f"<span class='diff-span'>{formatar_diff_span(diff, unit=unidade)}</span>"
-                    is_fastest = fastest_laps.get(p) and pd.notna(dado_atual) and dado_atual == fastest_laps.get(p)
-                    cell_class = "fastest-lap" if is_fastest and tipo_analise == "Tempo de Volta" else ""
-                    # CORREÇÃO: Verificação de NaN para velocidade
+                    is_best = best_values.get(p) and pd.notna(dado_atual) and dado_atual == best_values.get(p)
+                    cell_class = "best-value" if is_best else ""
                     valor_str = fmt_tempo(dado_atual) if tipo_analise == "Tempo de Volta" else (f"{dado_atual:.1f}" if pd.notna(dado_atual) else "---")
                     html += f"<td class='{cell_class}'><b>{row[COL_VOLTA]}</b><br>{valor_str} {unidade}{diff_str}</td>"
             html += "</tr>"
     html += "</tbody></table></div>"
     st.markdown(html, unsafe_allow_html=True)
 
-# ... (código das outras abas sem alteração) ...
+# ... (abas Geral, Volta Rápida, Velocidade sem alterações) ...
 with tabs[1]:
     st.subheader("📋 Tabela Completa de Voltas")
     cols_to_show = [COL_PILOTO, COL_CAT, "Horário", COL_VOLTA] + COLS_TEMPO + [COL_VEL]
@@ -231,51 +231,50 @@ with tabs[3]:
     if not df_final.empty and COL_PILOTO in df_final and COL_VEL in df_final:
         idx_sp = df_final.loc[df_final.groupby(COL_PILOTO)[COL_VEL].idxmax()]; sp_df = idx_sp[[COL_PILOTO, COL_CAT, "Horário", COL_VOLTA, COL_VEL] + COLS_TEMPO].copy().sort_values(by=COL_VEL, ascending=False)
         for c in COLS_TEMPO: sp_df[c] = sp_df[c].apply(fmt_tempo); st.dataframe(sp_df, hide_index=True, use_container_width=True)
+
+
+# ===== ABA "GRÁFICOS" - CORRIGIDA E MELHORADA =====
 with tabs[4]:
-    st.header("📈 Análises Gráficas Adicionais")
+    st.header("📈 Análises Gráficas")
+
     if df_final.empty or len(sel_p) == 0:
         st.warning("Selecione pilotos para visualizar os gráficos."); st.stop()
-    st.subheader("Velocidade Máxima por Volta")
+
+    # --- GRÁFICO 1: TEMPO POR VOLTA ---
+    st.subheader("Comparativo de Tempo por Volta")
+    fig, ax = plt.subplots(figsize=(10, 5))
+    for p in sel_p:
+        g = df_final[df_final[COL_PILOTO] == p].sort_values(by=COL_VOLTA)
+        if not g.empty:
+            ax.plot(g[COL_VOLTA], g[COL_TT].dt.total_seconds(), marker='o', markersize=4, linestyle='-', label=p.split(' - ')[0])
+    ax.set_xlabel("Volta")
+    ax.set_ylabel("Tempo de Volta (M:SS)")
+    ax.set_title("Desempenho de Tempo de Volta")
+    def format_yticks_time(seconds, pos): return f'{int(seconds // 60)}:{int(seconds % 60):02d}'
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(format_yticks_time))
+    ax.grid(True, linestyle='--', alpha=0.6)
+    ax.legend()
+    st.pyplot(fig, use_container_width=True)
+    
+    st.markdown("---")
+
+    # --- GRÁFICO 2: VELOCIDADE MÁXIMA POR VOLTA ---
+    st.subheader("Comparativo de Top Speed por Volta")
     fig1, ax1 = plt.subplots(figsize=(10, 5))
     for p in sel_p:
         g = df_final[df_final[COL_PILOTO] == p].sort_values(by=COL_VOLTA)
         if not g.empty and COL_VEL in g.columns:
-            ax1.plot(g[COL_VOLTA], g[COL_VEL], marker='s', markersize=4, linestyle='--', label=p.split(' - ')[0])
-    ax1.set_xlabel("Volta"); ax1.set_ylabel("Velocidade (km/h)"); ax1.set_title("Comparativo de Top Speed por Volta")
-    ax1.grid(True, linestyle='--', alpha=0.6); ax1.legend()
+            ax1.plot(g[COL_VOLTA], g[COL_VEL].dropna(), marker='s', markersize=4, linestyle='--', label=p.split(' - ')[0])
+    ax1.set_xlabel("Volta")
+    ax1.set_ylabel("Velocidade (km/h)")
+    ax1.set_title("Desempenho de Top Speed por Volta")
+    ax1.grid(True, linestyle='--', alpha=0.6)
+    # CORREÇÃO: Limita o número de marcações no eixo Y para evitar sobreposição
+    ax1.yaxis.set_major_locator(mticker.MaxNLocator(integer=True, nbins=10))
+    ax1.legend()
     st.pyplot(fig1, use_container_width=True)
-    st.markdown("---")
-    st.subheader("Consistência dos Tempos de Volta (Desvio Padrão)")
-    consistencia = {}
-    for p in sel_p:
-        tempos_s = df_final[df_final[COL_PILOTO] == p][COL_TT].dt.total_seconds().dropna()
-        q1, q3 = tempos_s.quantile(0.25), tempos_s.quantile(0.75); iqr = q3 - q1
-        limite_inferior = q1 - 1.5 * iqr; limite_superior = q3 + 1.5 * iqr
-        tempos_filtrados = tempos_s[(tempos_s >= limite_inferior) & (tempos_s <= limite_superior)]
-        if not tempos_filtrados.empty: consistencia[p] = tempos_filtrados.std()
-    if consistencia:
-        pilotos_nomes = [p.split(' - ')[0] for p in consistencia.keys()]
-        valores_std = list(consistencia.values())
-        fig2, ax2 = plt.subplots(figsize=(10, 5))
-        bars = ax2.bar(pilotos_nomes, valores_std, color='skyblue')
-        ax2.set_ylabel("Desvio Padrão (em segundos)"); ax2.set_title("Menor a barra, mais consistente o piloto")
-        ax2.bar_label(bars, fmt='%.3f')
-        st.pyplot(fig2, use_container_width=True)
-    else: st.info("Não há dados suficientes para calcular a consistência.")
-    st.markdown("---")
-    st.subheader("Análise de Setores da Melhor Volta")
-    try:
-        idx_melhores_voltas = df_final.groupby(COL_PILOTO)[COL_TT].idxmin()
-        df_melhores_voltas = df_final.loc[idx_melhores_voltas].dropna(subset=[COL_S1, COL_S2, COL_S3])
-        if not df_melhores_voltas.empty:
-            pilotos_nomes = [p.split(' - ')[0] for p in df_melhores_voltas[COL_PILOTO]]
-            s1 = df_melhores_voltas[COL_S1].dt.total_seconds(); s2 = df_melhores_voltas[COL_S2].dt.total_seconds(); s3 = df_melhores_voltas[COL_S3].dt.total_seconds()
-            fig3, ax3 = plt.subplots(figsize=(10, 5))
-            ax3.bar(pilotos_nomes, s1, label='Setor 1', color='#1f77b4'); ax3.bar(pilotos_nomes, s2, bottom=s1, label='Setor 2', color='#ff7f0e'); ax3.bar(pilotos_nomes, s3, bottom=s1+s2, label='Setor 3', color='#2ca02c')
-            ax3.set_ylabel("Tempo da volta (segundos)"); ax3.set_title("Composição da Melhor Volta por Setores"); ax3.legend()
-            st.pyplot(fig3, use_container_width=True)
-        else: st.info("Não há dados de setores para a melhor volta dos pilotos selecionados.")
-    except (KeyError, ValueError): st.error("Dados de setores inválidos ou não encontrados para gerar o gráfico.")
+
+# ... (abas Histórico e Exportar sem alterações) ...
 with tabs[5]:
     st.subheader("🗂️ Etapas Salvas"); files_in_folder = sorted(os.listdir(PASTA_ETAPAS))
     st.dataframe(pd.DataFrame(files_in_folder, columns=["Arquivo"]), hide_index=True)
