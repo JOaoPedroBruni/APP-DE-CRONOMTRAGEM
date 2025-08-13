@@ -123,7 +123,7 @@ if not df_final.empty:
 tab_titles = ["Comparativo Visual", "Geral", "Volta Rápida", "Velocidade", "Gráficos", "Histórico", "Exportar"]
 tabs = st.tabs(tab_titles)
 
-# ... (código das abas 0, 1, 2 não mudam) ...
+# ... (código das abas 0, 1, 2, 3 não mudam) ...
 with tabs[0]:
     st.header("📊 Comparativo Visual")
     if len(sel_p) < 2:
@@ -215,61 +215,65 @@ with tabs[1]:
 with tabs[2]:
     st.subheader("🏆 Melhor Volta de Cada Piloto")
     if not df_final.empty and COL_PILOTO in df_final and COL_TT in df_final:
-        # Lógica segura para idxmin
         df_best = df_final.loc[df_final.groupby(COL_PILOTO)[COL_TT].idxmin()]
         cols_to_show_best = [COL_PILOTO, COL_CAT, "Horário", COL_VOLTA] + COLS_TEMPO + [COL_VEL]
         best_df = df_best[cols_to_show_best].copy().sort_values(by=COL_TT)
         for c in COLS_TEMPO: best_df[c] = best_df[c].apply(fmt_tempo)
         st.dataframe(best_df, hide_index=True, use_container_width=True)
-
-# ===== ABA "VELOCIDADE" - CORRIGIDA PARA EVITAR O ERRO 'KeyError' =====
 with tabs[3]:
     st.subheader("🚀 Maior Top Speed de Cada Piloto")
-    # Abordagem mais segura para evitar o erro, verificando se há dados
     if not df_final.empty and COL_VEL in df_final and not df_final[COL_VEL].dropna().empty:
         df_sorted = df_final.sort_values(by=COL_VEL, ascending=False).dropna(subset=[COL_VEL])
         sp_df = df_sorted.drop_duplicates(subset=[COL_PILOTO], keep='first')
-        
         cols_to_show_sp = [COL_PILOTO, COL_CAT, "Horário", COL_VOLTA, COL_VEL] + COLS_TEMPO
-        # Garante que todas as colunas existem antes de tentar acessá-las
         sp_df = sp_df[[col for col in cols_to_show_sp if col in sp_df.columns]]
-
         for c in COLS_TEMPO: 
-            if c in sp_df.columns:
-                sp_df[c] = sp_df[c].apply(fmt_tempo)
+            if c in sp_df.columns: sp_df[c] = sp_df[c].apply(fmt_tempo)
         st.dataframe(sp_df, hide_index=True, use_container_width=True)
     else:
         st.info("Não há dados de velocidade disponíveis para os pilotos e voltas selecionados.")
 
-
+# ===== ABA "GRÁFICOS" - CORRIGIDA PARA O ERRO 'ValueError' =====
 with tabs[4]:
     st.header("📈 Análises Gráficas")
+
     if df_final.empty or len(sel_p) == 0:
         st.warning("Selecione pilotos para visualizar os gráficos."); st.stop()
+
+    # --- GRÁFICO 1: TEMPO POR VOLTA ---
     st.subheader("Comparativo de Tempo por Volta")
     fig, ax = plt.subplots(figsize=(10, 5))
     for p in sel_p:
         g = df_final[df_final[COL_PILOTO] == p].sort_values(by=COL_VOLTA)
-        if not g.empty:
-            ax.plot(g[COL_VOLTA], g[COL_TT].dt.total_seconds(), marker='o', markersize=4, linestyle='-', label=p.split(' - ')[0])
+        # CORREÇÃO: Remove voltas sem tempo antes de plotar
+        g_plot = g.dropna(subset=[COL_TT])
+        if not g_plot.empty:
+            ax.plot(g_plot[COL_VOLTA], g_plot[COL_TT].dt.total_seconds(), marker='o', markersize=4, linestyle='-', label=p.split(' - ')[0])
     ax.set_xlabel("Volta"); ax.set_ylabel("Tempo de Volta (M:SS)")
     ax.set_title("Desempenho de Tempo de Volta")
     def format_yticks_time(seconds, pos): return f'{int(seconds // 60)}:{int(seconds % 60):02d}'
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(format_yticks_time))
     ax.grid(True, linestyle='--', alpha=0.6); ax.legend()
     st.pyplot(fig, use_container_width=True)
+    
     st.markdown("---")
+
+    # --- GRÁFICO 2: VELOCIDADE MÁXIMA POR VOLTA ---
     st.subheader("Comparativo de Top Speed por Volta")
     fig1, ax1 = plt.subplots(figsize=(10, 5))
     for p in sel_p:
         g = df_final[df_final[COL_PILOTO] == p].sort_values(by=COL_VOLTA)
-        if not g.empty and COL_VEL in g.columns:
-            ax1.plot(g[COL_VOLTA], g[COL_VEL].dropna(), marker='s', markersize=4, linestyle='--', label=p.split(' - ')[0])
-    ax1.set_xlabel("Volta"); ax1.set_ylabel("Velocidade (km/h)"); ax1.set_title("Desempenho de Top Speed por Volta")
+        # CORREÇÃO: Remove voltas sem velocidade ANTES de plotar
+        g_plot = g.dropna(subset=[COL_VEL])
+        if not g_plot.empty:
+            ax1.plot(g_plot[COL_VOLTA], g_plot[COL_VEL], marker='s', markersize=4, linestyle='--', label=p.split(' - ')[0])
+    ax1.set_xlabel("Volta"); ax1.set_ylabel("Velocidade (km/h)")
+    ax1.set_title("Desempenho de Top Speed por Volta")
     ax1.grid(True, linestyle='--', alpha=0.6)
     ax1.yaxis.set_major_locator(mticker.MaxNLocator(integer=True, nbins=10)); ax1.legend()
     st.pyplot(fig1, use_container_width=True)
 
+# ... (abas Histórico e Exportar sem alterações) ...
 with tabs[5]:
     st.subheader("🗂️ Etapas Salvas"); files_in_folder = sorted(os.listdir(PASTA_ETAPAS))
     st.dataframe(pd.DataFrame(files_in_folder, columns=["Arquivo"]), hide_index=True)
