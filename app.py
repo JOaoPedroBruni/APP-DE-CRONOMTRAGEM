@@ -18,10 +18,11 @@ PASTA_MAPAS = "mapas"; os.makedirs(PASTA_MAPAS, exist_ok=True)
 COL_LOCAL, COL_EVENTO = "Local", "Evento"
 COL_CAT, COL_PILOTO = "CATEGORIA", "Piloto"
 COL_VOLTA, COL_TT = "Volta", "Tempo Total da Volta"
-# ... (constantes e funções auxiliares permanecem as mesmas) ...
 COL_S1, COL_S2, COL_S3 = "Setor 1", "Setor 2", "Setor 3"
 COL_VEL = "TOP SPEED"; COLS_TEMPO = [COL_TT, COL_S1, COL_S2, COL_S3]
 EXTS_MAPA = (".png", ".jpg", ".jpeg", ".svg", ".gif")
+
+# ---------------- Funções auxiliares (sem alterações) ----------------
 def parse_tempo(txt):
     if pd.isna(txt): return pd.NaT
     s = str(txt).strip().replace(',', '.');
@@ -69,13 +70,11 @@ def ler_csv_auto(src):
         st.error(f"Não foi possível processar o arquivo. Formato desconhecido.")
         return pd.DataFrame()
 
-
-# ===== NOVA LÓGICA DE CARREGAMENTO E FILTRAGEM =====
+# ===== LÓGICA DE CARREGAMENTO E FILTRAGEM (CORRIGIDA) =====
 
 st.sidebar.header("📁 Importar Dados") 
 up = st.sidebar.file_uploader("Importar novo CSV", type="csv")
 
-# 1. Carrega todos os arquivos da pasta 'etapas_salvas'
 dfs_salvos = []
 for f in sorted(os.listdir(PASTA_ETAPAS)):
     if f.endswith('.csv'):
@@ -84,61 +83,70 @@ for f in sorted(os.listdir(PASTA_ETAPAS)):
         except Exception as e:
             st.warning(f"Não foi possível ler a etapa salva '{f}': {e}")
 
-# Combina todos os dataframes salvos em um só
 df_completo = pd.concat(dfs_salvos, ignore_index=True) if dfs_salvos else pd.DataFrame()
 
-# Processa o upload, se houver, e o adiciona ao dataframe completo
 if up:
     df_upload = ler_csv_auto(up)
-    # Salvar etapa movido para cá para que o arquivo esteja disponível no reload
     if st.sidebar.button("Salvar etapa importada"):
         with open(os.path.join(PASTA_ETAPAS, up.name), "wb") as f:
             f.write(up.getvalue())
         st.sidebar.success("Etapa salva! Recarregando...")
-        st.rerun() # Recarrega a página para incluir o novo arquivo na lista
+        st.rerun()
     df_completo = pd.concat([df_completo, df_upload], ignore_index=True)
 
 if df_completo.empty:
     st.info("Nenhuma etapa de corrida encontrada. Importe um arquivo CSV para começar.")
     st.stop()
 
-# 2. Popula os filtros com base no dataframe COMPLETO
+# ===== CORREÇÃO: MOVER O MAPEAMENTO DE CATEGORIA PARA CÁ =====
+MAPA_PILOTO = None
+for ext in (".csv", ".xlsx"):
+    f = f"pilotos_categoria{ext}"
+    if os.path.exists(f):
+        MAPA_PILOTO = f
+        break
+
+if MAPA_PILOTO:
+    mapa = pd.read_excel(MAPA_PILOTO) if MAPA_PILOTO.endswith(".xlsx") else pd.read_csv(MAPA_PILOTO, sep=';')
+    mapa[COL_PILOTO] = mapa[COL_PILOTO].str.strip()
+    mapa[COL_CAT] = mapa[COL_CAT].str.strip()
+    # Aplica o mapa ao dataframe COMPLETO
+    df_completo = df_completo.drop(columns=[COL_CAT], errors="ignore").merge(mapa[[COL_PILOTO, COL_CAT]], on=COL_PILOTO, how="left")
+# =============================================================
+
 st.sidebar.header("🔍 Filtros")
 locais_disponiveis = sorted(df_completo[COL_LOCAL].dropna().unique())
 loc_selecionado = st.sidebar.selectbox("Local", locais_disponiveis, index=0 if locais_disponiveis else None)
 
-# Filtra o dataframe com base no local para os próximos filtros
 df_filtrado_loc = df_completo[df_completo[COL_LOCAL] == loc_selecionado]
 
 eventos_disponiveis = sorted(df_filtrado_loc[COL_EVENTO].dropna().unique())
 ev_selecionado = st.sidebar.selectbox("Evento", eventos_disponiveis, index=0 if eventos_disponiveis else None)
 
-# Filtra novamente para o evento
 df_filtrado_ev = df_filtrado_loc[df_filtrado_loc[COL_EVENTO] == ev_selecionado]
 
+# Agora este filtro terá as categorias corretas (Sport, Trophy, etc.)
 categorias_disponiveis = sorted(df_filtrado_ev[COL_CAT].dropna().unique())
 cats_selecionadas = st.sidebar.multiselect("Categorias", categorias_disponiveis, default=categorias_disponiveis)
 
-# 3. DataFrame final para o app é baseado nas seleções dos filtros
 df = df_filtrado_ev[df_filtrado_ev[COL_CAT].isin(cats_selecionadas)]
 
-# O restante do código da sidebar para mapas e seleção de pilotos
 mapas_disp = [f for f in os.listdir(PASTA_MAPAS) if f.lower().endswith(EXTS_MAPA)]
-default_map = next((f for f in mapas_disp if os.path.splitext(f)[0].lower() == loc_selecionado.lower()), "— nenhum —")
+default_map = next((f for f in mapas_disp if os.path.splitext(f)[0].lower() == loc_selecionado.lower()), "— nenhum —") if loc_selecionado else "— nenhum —"
 map_select = st.sidebar.selectbox("🗺️ Escolher mapa", ["— nenhum —"] + mapas_disp, index=(["— nenhum —"] + mapas_disp).index(default_map))
 if map_select != "— nenhum —": st.sidebar.image(os.path.join(PASTA_MAPAS, map_select), use_container_width=True)
 
 pil = sorted(df[COL_PILOTO].dropna().unique())
-sel_p = st.sidebar.multiselect("Pilotos", pil, default=pil[:5]) # Aumentado o padrão para 5
+sel_p = st.sidebar.multiselect("Pilotos", pil, default=pil[:5])
 
 df_final = df[df[COL_PILOTO].isin(sel_p)]
-voltas = sorted(df_final[COL_VOLTA].dropna().unique())
-sel_v = st.sidebar.multiselect("Voltas", voltas, default=voltas)
-df_final = df_final[df_final[COL_VOLTA].isin(sel_v)].reset_index(drop=True)
+if not df_final.empty:
+    voltas = sorted(df_final[COL_VOLTA].dropna().unique())
+    sel_v = st.sidebar.multiselect("Voltas", voltas, default=voltas)
+    df_final = df_final[df_final[COL_VOLTA].isin(sel_v)].reset_index(drop=True)
 
-# O restante do código das abas de análise permanece o mesmo, pois `df_final` está corretamente filtrado
-# ... (código das abas "Comparativo Visual", "Geral", etc. omitido por brevidade, pois não muda)
-# O código das abas foi mantido igual ao da sua versão anterior
+# ===== O RESTANTE DO CÓDIGO DAS ABAS PERMANECE EXATAMENTE O MESMO =====
+# ... (código das abas "Comparativo Visual", "Geral", etc. omitido por brevidade) ...
 tab_titles = ["Comparativo Visual", "Geral", "Volta Rápida", "Velocidade", "Gráficos", "Histórico", "Exportar"]
 tabs = st.tabs(tab_titles)
 with tabs[0]:
