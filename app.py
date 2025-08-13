@@ -123,7 +123,6 @@ if not df_final.empty:
 tab_titles = ["Comparativo Visual", "Geral", "Volta Rápida", "Velocidade", "Gráficos", "Histórico", "Exportar"]
 tabs = st.tabs(tab_titles)
 
-# ... (código das abas 0, 1, 2, 3 não mudam) ...
 with tabs[0]:
     st.header("📊 Comparativo Visual")
     if len(sel_p) < 2:
@@ -152,12 +151,14 @@ with tabs[0]:
         ax.yaxis.set_major_locator(mticker.MaxNLocator(integer=True, nbins=10))
     piloto_referencia = modo_comparacao if modo_comparacao != "-- Comparação Sequencial --" else None
     for p in sel_p:
-        piloto_df_plot = df_final[df_final[COL_PILOTO] == p].sort_values(by=COL_VOLTA)
-        dados_y = piloto_df_plot[coluna_dado].dt.total_seconds() if tipo_analise == "Tempo de Volta" else piloto_df_plot[coluna_dado]
-        if piloto_referencia and p == piloto_referencia:
-            ax.plot(piloto_df_plot[COL_VOLTA], dados_y.dropna(), marker='o', markersize=7, linewidth=3, linestyle='--', label=f"{p} (Ref.)", zorder=10)
-        else:
-            ax.plot(piloto_df_plot[COL_VOLTA], dados_y.dropna(), marker='o', markersize=6, linewidth=2, label=p, alpha=0.8)
+        piloto_df_raw = df_final[df_final[COL_PILOTO] == p].sort_values(by=COL_VOLTA)
+        piloto_df_plot = piloto_df_raw.dropna(subset=[coluna_dado])
+        if not piloto_df_plot.empty:
+            dados_y = piloto_df_plot[coluna_dado].dt.total_seconds() if tipo_analise == "Tempo de Volta" else piloto_df_plot[coluna_dado]
+            if piloto_referencia and p == piloto_referencia:
+                ax.plot(piloto_df_plot[COL_VOLTA], dados_y, marker='o', markersize=7, linewidth=3, linestyle='--', label=f"{p} (Ref.)", zorder=10)
+            else:
+                ax.plot(piloto_df_plot[COL_VOLTA], dados_y, marker='o', markersize=6, linewidth=2, label=p, alpha=0.8)
     ax.set_xlabel("Volta"); ax.set_ylabel(y_label); ax.set_title(f"Comparativo de {tipo_analise}")
     ax.legend(fontsize='small'); ax.grid(True, which='both', linestyle='--', linewidth=0.5)
     if not df_final.empty: ax.set_xticks(sorted(df_final[COL_VOLTA].dropna().unique().astype(int)))
@@ -206,12 +207,14 @@ with tabs[0]:
             html += "</tr>"
     html += "</tbody></table></div>"
     st.markdown(html, unsafe_allow_html=True)
+
 with tabs[1]:
     st.subheader("📋 Tabela Completa de Voltas")
     cols_to_show = [COL_PILOTO, COL_CAT, "Horário", COL_VOLTA] + COLS_TEMPO + [COL_VEL]
     show = df_final[cols_to_show].copy()
     for c in COLS_TEMPO: show[c] = show[c].apply(fmt_tempo)
     st.dataframe(show, hide_index=True, use_container_width=True)
+
 with tabs[2]:
     st.subheader("🏆 Melhor Volta de Cada Piloto")
     if not df_final.empty and COL_PILOTO in df_final and COL_TT in df_final:
@@ -220,6 +223,7 @@ with tabs[2]:
         best_df = df_best[cols_to_show_best].copy().sort_values(by=COL_TT)
         for c in COLS_TEMPO: best_df[c] = best_df[c].apply(fmt_tempo)
         st.dataframe(best_df, hide_index=True, use_container_width=True)
+
 with tabs[3]:
     st.subheader("🚀 Maior Top Speed de Cada Piloto")
     if not df_final.empty and COL_VEL in df_final and not df_final[COL_VEL].dropna().empty:
@@ -233,19 +237,14 @@ with tabs[3]:
     else:
         st.info("Não há dados de velocidade disponíveis para os pilotos e voltas selecionados.")
 
-# ===== ABA "GRÁFICOS" - CORRIGIDA PARA O ERRO 'ValueError' =====
 with tabs[4]:
     st.header("📈 Análises Gráficas")
-
     if df_final.empty or len(sel_p) == 0:
         st.warning("Selecione pilotos para visualizar os gráficos."); st.stop()
-
-    # --- GRÁFICO 1: TEMPO POR VOLTA ---
     st.subheader("Comparativo de Tempo por Volta")
     fig, ax = plt.subplots(figsize=(10, 5))
     for p in sel_p:
         g = df_final[df_final[COL_PILOTO] == p].sort_values(by=COL_VOLTA)
-        # CORREÇÃO: Remove voltas sem tempo antes de plotar
         g_plot = g.dropna(subset=[COL_TT])
         if not g_plot.empty:
             ax.plot(g_plot[COL_VOLTA], g_plot[COL_TT].dt.total_seconds(), marker='o', markersize=4, linestyle='-', label=p.split(' - ')[0])
@@ -255,15 +254,11 @@ with tabs[4]:
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(format_yticks_time))
     ax.grid(True, linestyle='--', alpha=0.6); ax.legend()
     st.pyplot(fig, use_container_width=True)
-    
     st.markdown("---")
-
-    # --- GRÁFICO 2: VELOCIDADE MÁXIMA POR VOLTA ---
     st.subheader("Comparativo de Top Speed por Volta")
     fig1, ax1 = plt.subplots(figsize=(10, 5))
     for p in sel_p:
         g = df_final[df_final[COL_PILOTO] == p].sort_values(by=COL_VOLTA)
-        # CORREÇÃO: Remove voltas sem velocidade ANTES de plotar
         g_plot = g.dropna(subset=[COL_VEL])
         if not g_plot.empty:
             ax1.plot(g_plot[COL_VOLTA], g_plot[COL_VEL], marker='s', markersize=4, linestyle='--', label=p.split(' - ')[0])
@@ -273,10 +268,10 @@ with tabs[4]:
     ax1.yaxis.set_major_locator(mticker.MaxNLocator(integer=True, nbins=10)); ax1.legend()
     st.pyplot(fig1, use_container_width=True)
 
-# ... (abas Histórico e Exportar sem alterações) ...
 with tabs[5]:
     st.subheader("🗂️ Etapas Salvas"); files_in_folder = sorted(os.listdir(PASTA_ETAPAS))
     st.dataframe(pd.DataFrame(files_in_folder, columns=["Arquivo"]), hide_index=True)
+
 with tabs[6]:
     st.subheader("📤 Exportar dados filtrados"); buf = io.BytesIO(); out = df_final.copy();
     for c in COLS_TEMPO: 
