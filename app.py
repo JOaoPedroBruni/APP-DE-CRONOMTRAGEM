@@ -48,11 +48,9 @@ def formatar_diff_span(td_or_float, unit=""):
 def normalizar(df):
     for c in COLS_TEMPO:
         if c in df.columns: df[c] = df[c].apply(parse_tempo)
-    # CORREÇÃO PARA GRÁFICO: Garantir que a velocidade seja sempre numérica
     if COL_VEL in df.columns:
         df[COL_VEL] = pd.to_numeric(df[COL_VEL], errors='coerce')
     return df
-
 def ler_csv_auto(src):
     try: df = pd.read_csv(src, sep=';', encoding='windows-1252', low_memory=False)
     except: df = pd.read_csv(src, sep=';', low_memory=False)
@@ -74,7 +72,7 @@ def ler_csv_auto(src):
     except (StopIteration, ValueError):
         st.error(f"Não foi possível processar o arquivo. Formato desconhecido."); return pd.DataFrame()
 
-# ===== LÓGICA DE CARREGAMENTO E FILTRAGEM (sem alterações) =====
+# ===== LÓGICA DE CARREGAMENTO E FILTRAGEM =====
 st.sidebar.header("📁 Importar Dados") 
 up = st.sidebar.file_uploader("Importar novo CSV", type="csv")
 dfs_salvos = []
@@ -125,7 +123,7 @@ if not df_final.empty:
 tab_titles = ["Comparativo Visual", "Geral", "Volta Rápida", "Velocidade", "Gráficos", "Histórico", "Exportar"]
 tabs = st.tabs(tab_titles)
 
-# ===== ABA "COMPARATIVO VISUAL" - COM DESTAQUE ROXO INTELIGENTE =====
+# ... (código das abas 0, 1, 2 não mudam) ...
 with tabs[0]:
     st.header("📊 Comparativo Visual")
     if len(sel_p) < 2:
@@ -168,24 +166,22 @@ with tabs[0]:
     st.subheader(f"Análise Detalhada: {tipo_analise}")
     common_css = """<style> .table-container { overflow-x: auto; } .comp-table { width: 100%; border-collapse: collapse; font-size: 0.9em; } .comp-table th, .comp-table td { padding: 6px 8px; text-align: center; white-space: nowrap; } .comp-table th { font-family: sans-serif; border-bottom: 2px solid #444; } .comp-table td { border-bottom: 1px solid #333; line-height: 1.3; } .comp-table tr:hover td { background-color: #2e2e2e; } .comp-table b { font-size: 1.1em; } .diff-span { font-size: 0.9em; display: block; } .diff-pos { color: #ff4d4d !important; } .diff-neg { color: #4dff4d !important; } .diff-zero { color: #888; } .best-value { background-color: #483D8B; border-radius: 4px; } </style>"""
     html = f"{common_css}<div class='table-container'><table class='comp-table'><thead><tr>"
-    if not piloto_referencia: # Modo Sequencial
+    if not piloto_referencia:
         for i, p in enumerate(sel_p):
             html += f"<th>{p}</th>";
             if i < len(sel_p) - 1: html += "<th>VS</th>"
-    else: # Modo Referência
+    else:
         for p in sel_p: html += f"<th>{p}</th>"
     html += "</tr></thead><tbody>"
     if not df_comp.empty:
-        # CORREÇÃO: Lógica para pegar melhor valor (min para tempo, max para velocidade)
         best_values = {}
         if tipo_analise == "Tempo de Volta":
             best_values = {p: df_final[df_final[COL_PILOTO] == p][coluna_dado].min() for p in sel_p if not df_final[df_final[COL_PILOTO] == p].empty}
-        else: # Velocidade Máxima
+        else:
             best_values = {p: df_final[df_final[COL_PILOTO] == p][coluna_dado].max() for p in sel_p if not df_final[df_final[COL_PILOTO] == p].empty}
-            
         for _, row in df_comp.iterrows():
             html += "<tr>"
-            if not piloto_referencia: # Modo Sequencial
+            if not piloto_referencia:
                 for i, p in enumerate(sel_p):
                     dado_atual = row.get(p)
                     is_best = best_values.get(p) and pd.notna(dado_atual) and dado_atual == best_values.get(p)
@@ -196,7 +192,7 @@ with tabs[0]:
                         dado_prox = row.get(sel_p[i+1])
                         diff = dado_prox - dado_atual if pd.notna(dado_atual) and pd.notna(dado_prox) else None
                         html += formatar_diferenca_html(diff, unit=unidade)
-            else: # Modo Referência
+            else:
                 dado_ref = row.get(piloto_referencia)
                 for p in sel_p:
                     dado_atual = row.get(p); diff_str = ""
@@ -210,8 +206,6 @@ with tabs[0]:
             html += "</tr>"
     html += "</tbody></table></div>"
     st.markdown(html, unsafe_allow_html=True)
-
-# ... (abas Geral, Volta Rápida, Velocidade sem alterações) ...
 with tabs[1]:
     st.subheader("📋 Tabela Completa de Voltas")
     cols_to_show = [COL_PILOTO, COL_CAT, "Horário", COL_VOLTA] + COLS_TEMPO + [COL_VEL]
@@ -221,65 +215,68 @@ with tabs[1]:
 with tabs[2]:
     st.subheader("🏆 Melhor Volta de Cada Piloto")
     if not df_final.empty and COL_PILOTO in df_final and COL_TT in df_final:
-        idx_best = df_final.loc[df_final.groupby(COL_PILOTO)[COL_TT].idxmin()]
+        # Lógica segura para idxmin
+        df_best = df_final.loc[df_final.groupby(COL_PILOTO)[COL_TT].idxmin()]
         cols_to_show_best = [COL_PILOTO, COL_CAT, "Horário", COL_VOLTA] + COLS_TEMPO + [COL_VEL]
-        best_df = idx_best[cols_to_show_best].copy().sort_values(by=COL_TT)
+        best_df = df_best[cols_to_show_best].copy().sort_values(by=COL_TT)
         for c in COLS_TEMPO: best_df[c] = best_df[c].apply(fmt_tempo)
         st.dataframe(best_df, hide_index=True, use_container_width=True)
+
+# ===== ABA "VELOCIDADE" - CORRIGIDA PARA EVITAR O ERRO 'KeyError' =====
 with tabs[3]:
     st.subheader("🚀 Maior Top Speed de Cada Piloto")
-    if not df_final.empty and COL_PILOTO in df_final and COL_VEL in df_final:
-        idx_sp = df_final.loc[df_final.groupby(COL_PILOTO)[COL_VEL].idxmax()]; sp_df = idx_sp[[COL_PILOTO, COL_CAT, "Horário", COL_VOLTA, COL_VEL] + COLS_TEMPO].copy().sort_values(by=COL_VEL, ascending=False)
-        for c in COLS_TEMPO: sp_df[c] = sp_df[c].apply(fmt_tempo); st.dataframe(sp_df, hide_index=True, use_container_width=True)
+    # Abordagem mais segura para evitar o erro, verificando se há dados
+    if not df_final.empty and COL_VEL in df_final and not df_final[COL_VEL].dropna().empty:
+        df_sorted = df_final.sort_values(by=COL_VEL, ascending=False).dropna(subset=[COL_VEL])
+        sp_df = df_sorted.drop_duplicates(subset=[COL_PILOTO], keep='first')
+        
+        cols_to_show_sp = [COL_PILOTO, COL_CAT, "Horário", COL_VOLTA, COL_VEL] + COLS_TEMPO
+        # Garante que todas as colunas existem antes de tentar acessá-las
+        sp_df = sp_df[[col for col in cols_to_show_sp if col in sp_df.columns]]
+
+        for c in COLS_TEMPO: 
+            if c in sp_df.columns:
+                sp_df[c] = sp_df[c].apply(fmt_tempo)
+        st.dataframe(sp_df, hide_index=True, use_container_width=True)
+    else:
+        st.info("Não há dados de velocidade disponíveis para os pilotos e voltas selecionados.")
 
 
-# ===== ABA "GRÁFICOS" - CORRIGIDA E MELHORADA =====
 with tabs[4]:
     st.header("📈 Análises Gráficas")
-
     if df_final.empty or len(sel_p) == 0:
         st.warning("Selecione pilotos para visualizar os gráficos."); st.stop()
-
-    # --- GRÁFICO 1: TEMPO POR VOLTA ---
     st.subheader("Comparativo de Tempo por Volta")
     fig, ax = plt.subplots(figsize=(10, 5))
     for p in sel_p:
         g = df_final[df_final[COL_PILOTO] == p].sort_values(by=COL_VOLTA)
         if not g.empty:
             ax.plot(g[COL_VOLTA], g[COL_TT].dt.total_seconds(), marker='o', markersize=4, linestyle='-', label=p.split(' - ')[0])
-    ax.set_xlabel("Volta")
-    ax.set_ylabel("Tempo de Volta (M:SS)")
+    ax.set_xlabel("Volta"); ax.set_ylabel("Tempo de Volta (M:SS)")
     ax.set_title("Desempenho de Tempo de Volta")
     def format_yticks_time(seconds, pos): return f'{int(seconds // 60)}:{int(seconds % 60):02d}'
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(format_yticks_time))
-    ax.grid(True, linestyle='--', alpha=0.6)
-    ax.legend()
+    ax.grid(True, linestyle='--', alpha=0.6); ax.legend()
     st.pyplot(fig, use_container_width=True)
-    
     st.markdown("---")
-
-    # --- GRÁFICO 2: VELOCIDADE MÁXIMA POR VOLTA ---
     st.subheader("Comparativo de Top Speed por Volta")
     fig1, ax1 = plt.subplots(figsize=(10, 5))
     for p in sel_p:
         g = df_final[df_final[COL_PILOTO] == p].sort_values(by=COL_VOLTA)
         if not g.empty and COL_VEL in g.columns:
             ax1.plot(g[COL_VOLTA], g[COL_VEL].dropna(), marker='s', markersize=4, linestyle='--', label=p.split(' - ')[0])
-    ax1.set_xlabel("Volta")
-    ax1.set_ylabel("Velocidade (km/h)")
-    ax1.set_title("Desempenho de Top Speed por Volta")
+    ax1.set_xlabel("Volta"); ax1.set_ylabel("Velocidade (km/h)"); ax1.set_title("Desempenho de Top Speed por Volta")
     ax1.grid(True, linestyle='--', alpha=0.6)
-    # CORREÇÃO: Limita o número de marcações no eixo Y para evitar sobreposição
-    ax1.yaxis.set_major_locator(mticker.MaxNLocator(integer=True, nbins=10))
-    ax1.legend()
+    ax1.yaxis.set_major_locator(mticker.MaxNLocator(integer=True, nbins=10)); ax1.legend()
     st.pyplot(fig1, use_container_width=True)
 
-# ... (abas Histórico e Exportar sem alterações) ...
 with tabs[5]:
     st.subheader("🗂️ Etapas Salvas"); files_in_folder = sorted(os.listdir(PASTA_ETAPAS))
     st.dataframe(pd.DataFrame(files_in_folder, columns=["Arquivo"]), hide_index=True)
 with tabs[6]:
     st.subheader("📤 Exportar dados filtrados"); buf = io.BytesIO(); out = df_final.copy();
-    for c in COLS_TEMPO: out[c] = out[c].apply(fmt_tempo)
+    for c in COLS_TEMPO: 
+        if c in out.columns:
+            out[c] = out[c].apply(fmt_tempo)
     with pd.ExcelWriter(buf, engine='xlsxwriter') as w: out.to_excel(w, index=False)
     st.download_button("⬇️ Baixar Excel", buf.getvalue(), file_name=f"cronometro_{loc_selecionado}_{ev_selecionado}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
