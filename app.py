@@ -22,7 +22,6 @@ COL_S1, COL_S2, COL_S3 = "Setor 1", "Setor 2", "Setor 3"
 COL_VEL = "TOP SPEED"; COLS_TEMPO = [COL_TT, COL_S1, COL_S2, COL_S3]
 EXTS_MAPA = (".png", ".jpg", ".jpeg", ".svg", ".gif")
 
-# ... (todas as funções auxiliares como parse_tempo, fmt_tempo, etc. permanecem as mesmas) ...
 def parse_tempo(txt):
     if pd.isna(txt): return pd.NaT
     s = str(txt).strip().replace(',', '.');
@@ -127,7 +126,7 @@ if not df_final.empty:
     sel_v = st.sidebar.multiselect("Voltas", voltas, default=voltas)
     df_final = df_final[df_final[COL_VOLTA].isin(sel_v)].reset_index(drop=True)
 
-best_lap = df_final[COL_TT].min() if not df_final.empty else None
+best_lap = df_final[COL_TT].min() if not df_final.empty and COL_TT in df_final else None
 best_spd = df_final[COL_VEL].max() if not df_final.empty and COL_VEL in df_final else None
 best_sec = {}
 if not df_final.empty:
@@ -229,46 +228,41 @@ with tabs[0]:
 with tabs[1]:
     st.subheader("📋 Tabela Completa de Voltas")
     
-    # Prepara o dataframe para exibição
     cols_to_show = [COL_PILOTO, COL_CAT, "Horário", COL_VOLTA] + COLS_TEMPO + [COL_VEL]
-    # Garante que apenas colunas existentes em df_final sejam usadas
     cols_existentes = [col for col in cols_to_show if col in df_final.columns]
     show = df_final[cols_existentes].copy()
 
-    # Formata as colunas de tempo para string
     for c in COLS_TEMPO:
         if c in show.columns:
             show[c] = show[c].apply(fmt_tempo)
     
-    # Função de estilo refeita para ser mais segura
     def sty_all(row):
+        # Usar pd.Series para construir os estilos é mais seguro
         styles = pd.Series('', index=row.index)
+        # Acessar a linha original pelos índices de `show` que são os mesmos de `df_final`
         original_row = df_final.loc[row.name]
 
-        # Destaque melhor volta (Azul)
-        if best_lap and pd.notna(original_row.get(COL_TT)) and original_row.get(COL_TT) == best_lap:
+        if best_lap and COL_TT in original_row and pd.notna(original_row[COL_TT]) and original_row[COL_TT] == best_lap:
             styles[COL_TT] = 'color: #00BFFF; font-weight: bold;'
         
-        # Destaque melhores setores (Roxo)
         for sec_col in [COL_S1, COL_S2, COL_S3]:
-            if sec_col in best_sec and pd.notna(original_row.get(sec_col)) and original_row.get(sec_col) == best_sec[sec_col]:
+            if sec_col in original_row and sec_col in best_sec and pd.notna(original_row[sec_col]) and original_row[sec_col] == best_sec[sec_col]:
                 styles[sec_col] = 'background-color: #483D8B; color: white;'
         
-        # Destaque melhor velocidade (Verde)
-        if best_spd and pd.notna(original_row.get(COL_VEL)) and original_row.get(COL_VEL) == best_spd:
+        if best_spd and COL_VEL in original_row and pd.notna(original_row[COL_VEL]) and original_row[COL_VEL] == best_spd:
             styles[COL_VEL] = 'background-color: #2E8B57; color: white;'
             
         return styles
 
-    # Aplica o estilo apenas se o dataframe não estiver vazio
     if not show.empty:
         st.dataframe(show.style.apply(sty_all, axis=1), hide_index=True, use_container_width=True)
     else:
         st.dataframe(show, hide_index=True, use_container_width=True)
 
+# ... (Restante do código das abas sem alterações)...
 with tabs[2]:
     st.subheader("🏆 Melhor Volta de Cada Piloto")
-    if not df_final.empty and COL_PILOTO in df_final and COL_TT in df_final:
+    if not df_final.empty and COL_PILOTO in df_final and COL_TT in df_final and not df_final[COL_TT].dropna().empty:
         df_best = df_final.loc[df_final.groupby(COL_PILOTO)[COL_TT].idxmin()]
         cols_to_show_best = [COL_PILOTO, COL_CAT, "Horário", COL_VOLTA] + COLS_TEMPO + [COL_VEL]
         best_df = df_best[[col for col in cols_to_show_best if col in df_best.columns]].copy().sort_values(by=COL_TT)
@@ -276,6 +270,8 @@ with tabs[2]:
             if c in best_df.columns:
                 best_df[c] = best_df[c].apply(fmt_tempo)
         st.dataframe(best_df, hide_index=True, use_container_width=True)
+    else:
+        st.info("Não há dados de tempo de volta disponíveis para os pilotos selecionados.")
 
 with tabs[3]:
     st.subheader("🚀 Maior Top Speed de Cada Piloto")
@@ -289,7 +285,6 @@ with tabs[3]:
         st.dataframe(sp_df, hide_index=True, use_container_width=True)
     else:
         st.info("Não há dados de velocidade disponíveis para os pilotos e voltas selecionados.")
-
 with tabs[4]:
     st.header("📈 Análises Gráficas")
     if df_final.empty or len(sel_p) == 0:
@@ -320,11 +315,9 @@ with tabs[4]:
     ax1.grid(True, linestyle='--', alpha=0.6)
     ax1.yaxis.set_major_locator(mticker.MaxNLocator(integer=True, nbins=10)); ax1.legend()
     st.pyplot(fig1, use_container_width=True)
-
 with tabs[5]:
     st.subheader("🗂️ Etapas Salvas"); files_in_folder = sorted(os.listdir(PASTA_ETAPAS))
     st.dataframe(pd.DataFrame(files_in_folder, columns=["Arquivo"]), hide_index=True)
-
 with tabs[6]:
     st.subheader("📤 Exportar dados filtrados"); buf = io.BytesIO(); out = df_final.copy();
     for c in COLS_TEMPO: 
