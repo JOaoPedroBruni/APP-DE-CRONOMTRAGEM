@@ -18,100 +18,129 @@ PASTA_MAPAS = "mapas"; os.makedirs(PASTA_MAPAS, exist_ok=True)
 COL_LOCAL, COL_EVENTO = "Local", "Evento"
 COL_CAT, COL_PILOTO = "CATEGORIA", "Piloto"
 COL_VOLTA, COL_TT = "Volta", "Tempo Total da Volta"
+# ... (constantes e funções auxiliares permanecem as mesmas) ...
 COL_S1, COL_S2, COL_S3 = "Setor 1", "Setor 2", "Setor 3"
 COL_VEL = "TOP SPEED"; COLS_TEMPO = [COL_TT, COL_S1, COL_S2, COL_S3]
 EXTS_MAPA = (".png", ".jpg", ".jpeg", ".svg", ".gif")
-
-# ---------------- Funções tempo ----------------
 def parse_tempo(txt):
     if pd.isna(txt): return pd.NaT
     s = str(txt).strip().replace(',', '.');
     if re.fullmatch(r"\d{1,2}:\d{2}\.\d{1,3}", s): m, r = s.split(':'); return pd.to_timedelta(int(m)*60+float(r),unit='s')
     if re.fullmatch(r"\d{1,3}\.\d{1,3}", s): return pd.to_timedelta(float(s), unit='s')
     return pd.to_timedelta(s, errors='coerce')
-
 def fmt_tempo(td):
     if pd.isna(td) or td is None: return "---"
     s = td.total_seconds(); m = int((s % 1) * 1000); n = int(s // 60); c = int(s % 60); return f"{n:01d}:{c:02d}.{m:03d}"
-
 def formatar_diferenca_html_sequencial(td):
     if pd.isna(td) or td is None: return "<td></td>"
     s = td.total_seconds()
     sinal = "+" if s > 0 else ""; classe = "diff-pos" if s > 0 else "diff-neg"; icone = "▲" if s > 0 else "▼"
     if s == 0: return "<td>0.000</td>"
     return f"<td class='{classe}'>{sinal}{s:.3f} {icone}</td>"
-
 def formatar_diff_span_referencia(td):
     if pd.isna(td) or td is None: return ""
     s = td.total_seconds()
     if s == 0: return f"<span class='diff-zero'>0.000</span>"
     sinal = "+" if s > 0 else ""; classe = "diff-pos" if s > 0 else "diff-neg"; icone = "▲" if s > 0 else "▼"
     return f"<span class='{classe}'>{sinal}{s:.3f} {icone}</span>"
-
 def normalizar(df):
     for c in COLS_TEMPO:
         if c in df.columns: df[c] = df[c].apply(parse_tempo)
     return df
-
 def ler_csv_auto(src):
-    try: df = pd.read_csv(src, sep=';', encoding='windows-1252')
-    except: df = pd.read_csv(src, sep=';')
+    try: df = pd.read_csv(src, sep=';', encoding='windows-1252', low_memory=False)
+    except: df = pd.read_csv(src, sep=';', low_memory=False)
     if {COL_PILOTO, COL_VOLTA, COL_S1}.issubset(df.columns): return normalizar(df)
     raw = src.getvalue().decode("utf-8", "ignore") if hasattr(src, "getvalue") else open(src, "r", encoding="utf-8", errors="ignore").read()
     lines = [l.strip() for l in raw.splitlines() if l.strip()]
-    hdr = next(i for i, l in enumerate(lines) if "Lap Tm" in l and "Lap" in l)
-    df_alt = pd.read_csv(StringIO("\n".join(lines[hdr:])), sep=',', quotechar='"', engine='python')
-    hora_pat = re.compile(r"^\d{1,2}:\d{2}:\d{2}\.\d{1,3}$")
-    col_hora = next(c for c in df_alt.columns if df_alt[c].astype(str).str.match(hora_pat).sum() > 0)
-    df_alt["Piloto_tmp"] = df_alt[col_hora].where(~df_alt[col_hora].str.match(hora_pat, na=False)).ffill()
-    df_map = pd.DataFrame({
-        COL_LOCAL: "Desconhecido", COL_EVENTO: "Sprint Trophy", COL_CAT: "N/A", COL_PILOTO: df_alt["Piloto_tmp"],
-        "Horário": df_alt[col_hora], COL_VOLTA: df_alt["Lap"], COL_TT: df_alt["Lap Tm"], COL_S1: df_alt["S1 Tm"],
-        COL_S2: df_alt["S2 Tm"], COL_S3: df_alt["S3 Tm"], COL_VEL: df_alt["Speed"],
-    })
-    return normalizar(df_map)
+    try:
+        hdr = next(i for i, l in enumerate(lines) if "Lap Tm" in l and "Lap" in l)
+        df_alt = pd.read_csv(StringIO("\n".join(lines[hdr:])), sep=',', quotechar='"', engine='python')
+        hora_pat = re.compile(r"^\d{1,2}:\d{2}:\d{2}\.\d{1,3}$")
+        col_hora = next(c for c in df_alt.columns if df_alt[c].astype(str).str.match(hora_pat).sum() > 0)
+        df_alt["Piloto_tmp"] = df_alt[col_hora].where(~df_alt[col_hora].str.match(hora_pat, na=False)).ffill()
+        df_map = pd.DataFrame({
+            COL_LOCAL: "Desconhecido", COL_EVENTO: "Sprint Trophy", COL_CAT: "N/A", COL_PILOTO: df_alt["Piloto_tmp"],
+            "Horário": df_alt[col_hora], COL_VOLTA: df_alt["Lap"], COL_TT: df_alt["Lap Tm"], COL_S1: df_alt["S1 Tm"],
+            COL_S2: df_alt["S2 Tm"], COL_S3: df_alt["S3 Tm"], COL_VEL: df_alt["Speed"],
+        })
+        return normalizar(df_map)
+    except (StopIteration, ValueError):
+        st.error(f"Não foi possível processar o arquivo. Formato desconhecido.")
+        return pd.DataFrame()
 
-st.sidebar.header("📁 Importar"); up = st.sidebar.file_uploader("CSV", type="csv"); files = sorted(os.listdir(PASTA_ETAPAS)); sel = st.sidebar.selectbox("Etapas salvas:", ["---"] + files)
-df = ler_csv_auto(up) if up else ler_csv_auto(os.path.join(PASTA_ETAPAS, sel)) if sel != "---" else None
-if up and df is not None and st.sidebar.button("Salvar etapa"):
-    with open(os.path.join(PASTA_ETAPAS, up.name), "wb") as f: f.write(up.getbuffer()); st.sidebar.success("Etapa salva!")
-if df is None: st.info("📤 Importe um CSV ou escolha uma etapa salva na barra lateral."); st.stop()
 
-MAPA_PILOTO = None
-for ext in (".csv", ".xlsx"):
-    f = f"pilotos_categoria{ext}"
-    if os.path.exists(f): MAPA_PILOTO = f; break
-if MAPA_PILOTO:
-    mapa = pd.read_excel(MAPA_PILOTO) if MAPA_PILOTO.endswith(".xlsx") else pd.read_csv(MAPA_PILOTO, sep=';')
-    mapa[COL_PILOTO] = mapa[COL_PILOTO].str.strip(); mapa[COL_CAT] = mapa[COL_CAT].str.strip()
-    df = df.drop(columns=[COL_CAT], errors="ignore").merge(mapa[[COL_PILOTO, COL_CAT]], on=COL_PILOTO, how="left")
+# ===== NOVA LÓGICA DE CARREGAMENTO E FILTRAGEM =====
 
-st.sidebar.header("🔍 Filtros"); loc = st.sidebar.selectbox("Local", sorted(df[COL_LOCAL].unique())); df = df[df[COL_LOCAL] == loc]
-mapas_disp = [f for f in os.listdir(PASTA_MAPAS) if f.lower().endswith(EXTS_MAPA)]; default_map = next((f for f in mapas_disp if os.path.splitext(f)[0].lower()==loc.lower()), "— nenhum —")
+st.sidebar.header("📁 Importar Dados") 
+up = st.sidebar.file_uploader("Importar novo CSV", type="csv")
+
+# 1. Carrega todos os arquivos da pasta 'etapas_salvas'
+dfs_salvos = []
+for f in sorted(os.listdir(PASTA_ETAPAS)):
+    if f.endswith('.csv'):
+        try:
+            dfs_salvos.append(ler_csv_auto(os.path.join(PASTA_ETAPAS, f)))
+        except Exception as e:
+            st.warning(f"Não foi possível ler a etapa salva '{f}': {e}")
+
+# Combina todos os dataframes salvos em um só
+df_completo = pd.concat(dfs_salvos, ignore_index=True) if dfs_salvos else pd.DataFrame()
+
+# Processa o upload, se houver, e o adiciona ao dataframe completo
+if up:
+    df_upload = ler_csv_auto(up)
+    # Salvar etapa movido para cá para que o arquivo esteja disponível no reload
+    if st.sidebar.button("Salvar etapa importada"):
+        with open(os.path.join(PASTA_ETAPAS, up.name), "wb") as f:
+            f.write(up.getvalue())
+        st.sidebar.success("Etapa salva! Recarregando...")
+        st.rerun() # Recarrega a página para incluir o novo arquivo na lista
+    df_completo = pd.concat([df_completo, df_upload], ignore_index=True)
+
+if df_completo.empty:
+    st.info("Nenhuma etapa de corrida encontrada. Importe um arquivo CSV para começar.")
+    st.stop()
+
+# 2. Popula os filtros com base no dataframe COMPLETO
+st.sidebar.header("🔍 Filtros")
+locais_disponiveis = sorted(df_completo[COL_LOCAL].dropna().unique())
+loc_selecionado = st.sidebar.selectbox("Local", locais_disponiveis, index=0 if locais_disponiveis else None)
+
+# Filtra o dataframe com base no local para os próximos filtros
+df_filtrado_loc = df_completo[df_completo[COL_LOCAL] == loc_selecionado]
+
+eventos_disponiveis = sorted(df_filtrado_loc[COL_EVENTO].dropna().unique())
+ev_selecionado = st.sidebar.selectbox("Evento", eventos_disponiveis, index=0 if eventos_disponiveis else None)
+
+# Filtra novamente para o evento
+df_filtrado_ev = df_filtrado_loc[df_filtrado_loc[COL_EVENTO] == ev_selecionado]
+
+categorias_disponiveis = sorted(df_filtrado_ev[COL_CAT].dropna().unique())
+cats_selecionadas = st.sidebar.multiselect("Categorias", categorias_disponiveis, default=categorias_disponiveis)
+
+# 3. DataFrame final para o app é baseado nas seleções dos filtros
+df = df_filtrado_ev[df_filtrado_ev[COL_CAT].isin(cats_selecionadas)]
+
+# O restante do código da sidebar para mapas e seleção de pilotos
+mapas_disp = [f for f in os.listdir(PASTA_MAPAS) if f.lower().endswith(EXTS_MAPA)]
+default_map = next((f for f in mapas_disp if os.path.splitext(f)[0].lower() == loc_selecionado.lower()), "— nenhum —")
 map_select = st.sidebar.selectbox("🗺️ Escolher mapa", ["— nenhum —"] + mapas_disp, index=(["— nenhum —"] + mapas_disp).index(default_map))
 if map_select != "— nenhum —": st.sidebar.image(os.path.join(PASTA_MAPAS, map_select), use_container_width=True)
-st.sidebar.markdown("---"); new_map = st.sidebar.file_uploader("📷 Adicionar novo mapa", type=[e.strip('.') for e in EXTS_MAPA], key="map_upl")
-if new_map is not None:
-    with open(os.path.join(PASTA_MAPAS, new_map.name), "wb") as f: f.write(new_map.getbuffer()); st.sidebar.success("Mapa salvo! Selecione‑o na lista."); st.rerun()
-ev = st.sidebar.selectbox("Evento", sorted(df[COL_EVENTO].unique()))
 
-# ===== ALTERAÇÃO PRINCIPAL AQUI =====
-# De selectbox para multiselect
-categorias_disponiveis = sorted(df[COL_CAT].dropna().unique())
-# Seleciona a primeira categoria por padrão para não começar vazio
-default_cat = [categorias_disponiveis[0]] if categorias_disponiveis else []
-cats_selecionadas = st.sidebar.multiselect("Categorias", categorias_disponiveis, default=default_cat)
-# Filtra o dataframe usando isin para aceitar a lista de categorias
-df = df[df[COL_CAT].isin(cats_selecionadas)]
+pil = sorted(df[COL_PILOTO].dropna().unique())
+sel_p = st.sidebar.multiselect("Pilotos", pil, default=pil[:5]) # Aumentado o padrão para 5
 
-pil = sorted(df[COL_PILOTO].unique()); sel_p = st.sidebar.multiselect("Pilotos", pil, default=pil[:2] if len(pil) >= 2 else pil, max_selections=5)
-df_filtrado = df[df[COL_PILOTO].isin(sel_p)]; voltas = sorted(df_filtrado[COL_VOLTA].unique()); sel_v = st.sidebar.multiselect("Voltas", voltas, default=voltas)
-df_final = df_filtrado[df_filtrado[COL_VOLTA].isin(sel_v)].reset_index(drop=True)
+df_final = df[df[COL_PILOTO].isin(sel_p)]
+voltas = sorted(df_final[COL_VOLTA].dropna().unique())
+sel_v = st.sidebar.multiselect("Voltas", voltas, default=voltas)
+df_final = df_final[df_final[COL_VOLTA].isin(sel_v)].reset_index(drop=True)
 
+# O restante do código das abas de análise permanece o mesmo, pois `df_final` está corretamente filtrado
+# ... (código das abas "Comparativo Visual", "Geral", etc. omitido por brevidade, pois não muda)
+# O código das abas foi mantido igual ao da sua versão anterior
 tab_titles = ["Comparativo Visual", "Geral", "Volta Rápida", "Velocidade", "Gráficos", "Histórico", "Exportar"]
 tabs = st.tabs(tab_titles)
-
-# ... (código da aba "Comparativo Visual" permanece o mesmo e funcionará com a nova seleção) ...
 with tabs[0]:
     st.header("📊 Comparativo Visual de Voltas")
     if len(sel_p) < 2:
@@ -127,7 +156,8 @@ with tabs[0]:
     df_comp = dados_pilotos[0] if dados_pilotos else pd.DataFrame()
     if len(dados_pilotos) > 1:
         for i in range(1, len(dados_pilotos)): df_comp = df_comp.join(dados_pilotos[i], how='outer')
-    df_comp = df_comp.sort_index().reset_index()
+    if not df_comp.empty:
+        df_comp = df_comp.sort_index().reset_index()
     fastest_laps = {p: df_final[df_final[COL_PILOTO] == p][COL_TT].min() for p in sel_p if not df_final[df_final[COL_PILOTO] == p].empty}
     common_css = """<style> .table-container { overflow-x: auto; } .comp-table { width: 100%; border-collapse: collapse; font-size: 0.9em; } .comp-table th, .comp-table td { padding: 6px 8px; text-align: center; white-space: nowrap; } .comp-table th { font-family: sans-serif; border-bottom: 2px solid #444; } .comp-table td { border-bottom: 1px solid #333; line-height: 1.3; } .comp-table tr:hover td { background-color: #2e2e2e; } .comp-table b { font-size: 1.1em; } .diff-span { font-size: 0.9em; display: block; } .diff-pos { color: #ff4d4d; } .diff-neg { color: #4dff4d; } .diff-zero { color: #888; } .fastest-lap { background-color: #483D8B; border-radius: 4px; } </style>"""
     if modo_comparacao == "-- Comparação Sequencial --":
@@ -143,18 +173,19 @@ with tabs[0]:
             html += f"<th>{p}</th>"
             if i < len(sel_p) - 1: html += "<th>VS</th>"
         html += "</tr></thead><tbody>"
-        for _, row in df_comp.iterrows():
-            html += "<tr>"
-            for i, p in enumerate(sel_p):
-                tempo_atual = row.get(p)
-                is_fastest = fastest_laps.get(p) and tempo_atual == fastest_laps[p]
-                cell_class = "fastest-lap" if is_fastest else ""
-                html += f"<td class='{cell_class}'><b>{row[COL_VOLTA]}</b><br>{fmt_tempo(tempo_atual)}</td>"
-                if i < len(sel_p) - 1:
-                    tempo_prox = row.get(sel_p[i+1])
-                    diff = tempo_prox - tempo_atual if pd.notna(tempo_atual) and pd.notna(tempo_prox) else None
-                    html += formatar_diferenca_html_sequencial(diff)
-            html += "</tr>"
+        if not df_comp.empty:
+            for _, row in df_comp.iterrows():
+                html += "<tr>"
+                for i, p in enumerate(sel_p):
+                    tempo_atual = row.get(p)
+                    is_fastest = fastest_laps.get(p) and tempo_atual == fastest_laps[p]
+                    cell_class = "fastest-lap" if is_fastest else ""
+                    html += f"<td class='{cell_class}'><b>{row[COL_VOLTA]}</b><br>{fmt_tempo(tempo_atual)}</td>"
+                    if i < len(sel_p) - 1:
+                        tempo_prox = row.get(sel_p[i+1])
+                        diff = tempo_prox - tempo_atual if pd.notna(tempo_atual) and pd.notna(tempo_prox) else None
+                        html += formatar_diferenca_html_sequencial(diff)
+                html += "</tr>"
         html += "</tbody></table></div>"
         st.markdown(html, unsafe_allow_html=True)
     else:
@@ -172,46 +203,39 @@ with tabs[0]:
         html = f"{common_css}<div class='table-container'><table class='comp-table'><thead><tr>"
         for p in sel_p: html += f"<th>{p}</th>"
         html += "</tr></thead><tbody>"
-        for _, row in df_comp.iterrows():
-            html += "<tr>"
-            tempo_ref = row.get(piloto_referencia)
-            for p in sel_p:
-                tempo_atual = row.get(p); diff_str = ""
-                if p != piloto_referencia:
-                    diff = tempo_atual - tempo_ref if pd.notna(tempo_atual) and pd.notna(tempo_ref) else None
-                    diff_str = f"<span class='diff-span'>{formatar_diff_span_referencia(diff)}</span>"
-                is_fastest = fastest_laps.get(p) and tempo_atual == fastest_laps[p]
-                cell_class = "fastest-lap" if is_fastest else ""
-                html += f"<td class='{cell_class}'><b>{row[COL_VOLTA]}</b><br>{fmt_tempo(tempo_atual)}{diff_str}</td>"
-            html += "</tr>"
+        if not df_comp.empty:
+            for _, row in df_comp.iterrows():
+                html += "<tr>"
+                tempo_ref = row.get(piloto_referencia)
+                for p in sel_p:
+                    tempo_atual = row.get(p); diff_str = ""
+                    if p != piloto_referencia:
+                        diff = tempo_atual - tempo_ref if pd.notna(tempo_atual) and pd.notna(tempo_ref) else None
+                        diff_str = f"<span class='diff-span'>{formatar_diff_span_referencia(diff)}</span>"
+                    is_fastest = fastest_laps.get(p) and tempo_atual == fastest_laps[p]
+                    cell_class = "fastest-lap" if is_fastest else ""
+                    html += f"<td class='{cell_class}'><b>{row[COL_VOLTA]}</b><br>{fmt_tempo(tempo_atual)}{diff_str}</td>"
+                html += "</tr>"
         html += "</tbody></table></div>"
         st.markdown(html, unsafe_allow_html=True)
     ax.legend(fontsize='small'); ax.grid(True, which='both', linestyle='--', linewidth=0.5)
-    if not df_final.empty: ax.set_xticks(sorted(df_final[COL_VOLTA].unique()))
+    if not df_final.empty: ax.set_xticks(sorted(df_final[COL_VOLTA].dropna().unique().astype(int)))
     st.pyplot(fig, use_container_width=True)
 
-
-# ===== ABAS "GERAL" E "VOLTA RÁPIDA" ATUALIZADAS PARA MOSTRAR CATEGORIA =====
-best_lap = df_final[COL_TT].min() if not df_final.empty else None; best_spd = df_final[COL_VEL].max() if not df_final.empty else None; best_sec = {c: df_final[c].min() for c in (COL_S1, COL_S2, COL_S3)} if not df_final.empty else {}
 with tabs[1]:
     st.subheader("📋 Tabela Completa de Voltas")
-    # Adicionando COL_CAT para exibição
     cols_to_show = [COL_PILOTO, COL_CAT, "Horário", COL_VOLTA] + COLS_TEMPO + [COL_VEL]
     show = df_final[cols_to_show].copy()
     for c in COLS_TEMPO: show[c] = show[c].apply(fmt_tempo)
     st.dataframe(show, hide_index=True, use_container_width=True)
-
 with tabs[2]:
     st.subheader("🏆 Melhor Volta de Cada Piloto")
     if not df_final.empty and COL_PILOTO in df_final and COL_TT in df_final:
         idx_best = df_final.loc[df_final.groupby(COL_PILOTO)[COL_TT].idxmin()]
-        # Adicionando COL_CAT para exibição
         cols_to_show_best = [COL_PILOTO, COL_CAT, "Horário", COL_VOLTA] + COLS_TEMPO + [COL_VEL]
         best_df = idx_best[cols_to_show_best].copy().sort_values(by=COL_TT)
         for c in COLS_TEMPO: best_df[c] = best_df[c].apply(fmt_tempo)
         st.dataframe(best_df, hide_index=True, use_container_width=True)
-
-# ... (código das outras abas permanece o mesmo) ...
 with tabs[3]:
     st.subheader("🚀 Maior Top Speed de Cada Piloto")
     if not df_final.empty and COL_PILOTO in df_final and COL_VEL in df_final:
@@ -223,10 +247,11 @@ with tabs[4]:
     ax.set_xlabel("Volta"); ax.set_ylabel("Tempo (s)"); ax.grid(); ax.legend(fontsize=8, bbox_to_anchor=(1.04, 1), loc="upper left", borderaxespad=0); st.pyplot(fig, use_container_width=True)
 with tabs[5]:
     st.subheader("🗂️ Etapas Salvas")
+    files = sorted(os.listdir(PASTA_ETAPAS))
     st.dataframe(pd.DataFrame(files, columns=["Arquivo"]), hide_index=True)
 with tabs[6]:
     st.subheader("📤 Exportar dados filtrados")
     buf = io.BytesIO(); out = df_final.copy();
     for c in COLS_TEMPO: out[c] = out[c].apply(fmt_tempo)
     with pd.ExcelWriter(buf, engine='xlsxwriter') as w: out.to_excel(w, index=False)
-    st.download_button("⬇️ Baixar Excel", buf.getvalue(), file_name=f"cronometro_{loc}_{ev}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    st.download_button("⬇️ Baixar Excel", buf.getvalue(), file_name=f"cronometro_{loc_selecionado}_{ev_selecionado}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
