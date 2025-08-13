@@ -22,6 +22,7 @@ COL_S1, COL_S2, COL_S3 = "Setor 1", "Setor 2", "Setor 3"
 COL_VEL = "TOP SPEED"; COLS_TEMPO = [COL_TT, COL_S1, COL_S2, COL_S3]
 EXTS_MAPA = (".png", ".jpg", ".jpeg", ".svg", ".gif")
 
+# ... (todas as funções auxiliares como parse_tempo, fmt_tempo, etc. permanecem as mesmas) ...
 def parse_tempo(txt):
     if pd.isna(txt): return pd.NaT
     s = str(txt).strip().replace(',', '.');
@@ -45,23 +46,17 @@ def formatar_diff_span(td_or_float, unit=""):
     if value == 0: return f"<span class='diff-zero'>0.000 {unit}</span>"
     sinal = "+" if value > 0 else ""; classe = "diff-pos" if value > 0 else "diff-neg"; icone = "▲" if value > 0 else "▼"
     return f"<span class='{classe}'>{sinal}{value:.3f} {icone} {unit}</span>"
-
-# ===== FUNÇÃO CORRIGIDA =====
 def normalizar(df):
     for c in COLS_TEMPO:
         if c in df.columns: df[c] = df[c].apply(parse_tempo)
-    # CORREÇÃO: Troca vírgulas por pontos ANTES de converter para número
     if COL_VEL in df.columns:
         df[COL_VEL] = pd.to_numeric(df[COL_VEL].astype(str).str.replace(',', '.'), errors='coerce')
     return df
-
 def ler_csv_auto(src):
     try: df = pd.read_csv(src, sep=';', encoding='windows-1252', low_memory=False)
     except: df = pd.read_csv(src, sep=';', low_memory=False)
-    # A verificação de colunas agora é mais robusta
     if COL_PILOTO in df.columns and COL_VOLTA in df.columns:
         return normalizar(df)
-    
     raw = src.getvalue().decode("utf-8", "ignore") if hasattr(src, "getvalue") else open(src, "r", encoding="utf-8", errors="ignore").read()
     lines = [l.strip() for l in raw.splitlines() if l.strip()]
     try:
@@ -77,11 +72,9 @@ def ler_csv_auto(src):
         })
         return normalizar(df_map)
     except (StopIteration, ValueError, KeyError):
-        # Aprimorado para não mostrar erro se o formato for simplesmente desconhecido
         return pd.DataFrame()
 
-
-# ===== LÓGICA DE CARREGAMENTO E FILTRAGEM (sem alterações) =====
+# ===== LÓGICA DE CARREGAMENTO E FILTRAGEM =====
 st.sidebar.header("📁 Importar Dados") 
 up = st.sidebar.file_uploader("Importar novo CSV", type="csv")
 dfs_salvos = []
@@ -134,10 +127,21 @@ if not df_final.empty:
     sel_v = st.sidebar.multiselect("Voltas", voltas, default=voltas)
     df_final = df_final[df_final[COL_VOLTA].isin(sel_v)].reset_index(drop=True)
 
-# ===== ABAS (o restante do código não precisa de alterações) =====
+# ===== CORREÇÃO: CÁLCULO DOS MELHORES VALORES GLOBAIS =====
+best_lap = df_final[COL_TT].min() if not df_final.empty else None
+best_spd = df_final[COL_VEL].max() if not df_final.empty and COL_VEL in df_final else None
+best_sec = {}
+if not df_final.empty:
+    for sec in [COL_S1, COL_S2, COL_S3]:
+        if sec in df_final.columns:
+            best_sec[sec] = df_final[sec].min()
+
+# ===== ABAS =====
 tab_titles = ["Comparativo Visual", "Geral", "Volta Rápida", "Velocidade", "Gráficos", "Histórico", "Exportar"]
 tabs = st.tabs(tab_titles)
+
 with tabs[0]:
+    # ... (código da aba Comparativo Visual sem alterações) ...
     st.header("📊 Comparativo Visual")
     if len(sel_p) < 2:
         st.warning("⚠️ Por favor, selecione de 2 a 5 pilotos na barra lateral para fazer a comparação."); st.stop()
@@ -221,19 +225,53 @@ with tabs[0]:
             html += "</tr>"
     html += "</tbody></table></div>"
     st.markdown(html, unsafe_allow_html=True)
+
+# ===== ABA "GERAL" - CORRIGIDA PARA MOSTRAR ESTILOS =====
 with tabs[1]:
     st.subheader("📋 Tabela Completa de Voltas")
     cols_to_show = [COL_PILOTO, COL_CAT, "Horário", COL_VOLTA] + COLS_TEMPO + [COL_VEL]
     show = df_final[cols_to_show].copy()
-    for c in COLS_TEMPO: show[c] = show[c].apply(fmt_tempo)
-    st.dataframe(show, hide_index=True, use_container_width=True)
+    for c in COLS_TEMPO:
+        if c in show.columns:
+            show[c] = show[c].apply(fmt_tempo)
+    
+    def sty_all(row):
+        original_row = df_final.loc[row.name]
+        styles = [''] * len(row)
+        
+        # Destaque melhor volta (Azul)
+        if pd.notna(original_row.get(COL_TT)) and original_row.get(COL_TT) == best_lap:
+            idx = row.index.get_loc(COL_TT)
+            styles[idx] = 'color: #00BFFF; font-weight: bold;'
+        
+        # Destaque melhores setores (Roxo)
+        for sec_col in [COL_S1, COL_S2, COL_S3]:
+            if sec_col in original_row and pd.notna(original_row.get(sec_col)) and sec_col in best_sec and original_row.get(sec_col) == best_sec[sec_col]:
+                idx = row.index.get_loc(sec_col)
+                styles[idx] = 'background-color: #483D8B; color: white;'
+        
+        # Destaque melhor velocidade (Verde)
+        if COL_VEL in original_row and pd.notna(original_row.get(COL_VEL)) and original_row.get(COL_VEL) == best_spd:
+            idx = row.index.get_loc(COL_VEL)
+            styles[idx] = 'background-color: #2E8B57; color: white;'
+            
+        return styles
+
+    if not show.empty:
+        st.dataframe(show.style.apply(sty_all, axis=1), hide_index=True, use_container_width=True)
+    else:
+        st.dataframe(show, hide_index=True, use_container_width=True)
+
+# ... (Restante do código das abas sem alterações)...
 with tabs[2]:
     st.subheader("🏆 Melhor Volta de Cada Piloto")
     if not df_final.empty and COL_PILOTO in df_final and COL_TT in df_final:
         df_best = df_final.loc[df_final.groupby(COL_PILOTO)[COL_TT].idxmin()]
         cols_to_show_best = [COL_PILOTO, COL_CAT, "Horário", COL_VOLTA] + COLS_TEMPO + [COL_VEL]
-        best_df = df_best[cols_to_show_best].copy().sort_values(by=COL_TT)
-        for c in COLS_TEMPO: best_df[c] = best_df[c].apply(fmt_tempo)
+        best_df = df_best[[col for col in cols_to_show_best if col in df_best.columns]].copy().sort_values(by=COL_TT)
+        for c in COLS_TEMPO: 
+            if c in best_df.columns:
+                best_df[c] = best_df[c].apply(fmt_tempo)
         st.dataframe(best_df, hide_index=True, use_container_width=True)
 with tabs[3]:
     st.subheader("🚀 Maior Top Speed de Cada Piloto")
