@@ -45,16 +45,23 @@ def formatar_diff_span(td_or_float, unit=""):
     if value == 0: return f"<span class='diff-zero'>0.000 {unit}</span>"
     sinal = "+" if value > 0 else ""; classe = "diff-pos" if value > 0 else "diff-neg"; icone = "▲" if value > 0 else "▼"
     return f"<span class='{classe}'>{sinal}{value:.3f} {icone} {unit}</span>"
+
+# ===== FUNÇÃO CORRIGIDA =====
 def normalizar(df):
     for c in COLS_TEMPO:
         if c in df.columns: df[c] = df[c].apply(parse_tempo)
+    # CORREÇÃO: Troca vírgulas por pontos ANTES de converter para número
     if COL_VEL in df.columns:
-        df[COL_VEL] = pd.to_numeric(df[COL_VEL], errors='coerce')
+        df[COL_VEL] = pd.to_numeric(df[COL_VEL].astype(str).str.replace(',', '.'), errors='coerce')
     return df
+
 def ler_csv_auto(src):
     try: df = pd.read_csv(src, sep=';', encoding='windows-1252', low_memory=False)
     except: df = pd.read_csv(src, sep=';', low_memory=False)
-    if {COL_PILOTO, COL_VOLTA, COL_S1}.issubset(df.columns): return normalizar(df)
+    # A verificação de colunas agora é mais robusta
+    if COL_PILOTO in df.columns and COL_VOLTA in df.columns:
+        return normalizar(df)
+    
     raw = src.getvalue().decode("utf-8", "ignore") if hasattr(src, "getvalue") else open(src, "r", encoding="utf-8", errors="ignore").read()
     lines = [l.strip() for l in raw.splitlines() if l.strip()]
     try:
@@ -69,26 +76,34 @@ def ler_csv_auto(src):
             COL_S2: df_alt["S2 Tm"], COL_S3: df_alt["S3 Tm"], COL_VEL: df_alt["Speed"],
         })
         return normalizar(df_map)
-    except (StopIteration, ValueError):
-        st.error(f"Não foi possível processar o arquivo. Formato desconhecido."); return pd.DataFrame()
+    except (StopIteration, ValueError, KeyError):
+        # Aprimorado para não mostrar erro se o formato for simplesmente desconhecido
+        return pd.DataFrame()
 
-# ===== LÓGICA DE CARREGAMENTO E FILTRAGEM =====
+
+# ===== LÓGICA DE CARREGAMENTO E FILTRAGEM (sem alterações) =====
 st.sidebar.header("📁 Importar Dados") 
 up = st.sidebar.file_uploader("Importar novo CSV", type="csv")
 dfs_salvos = []
 for f in sorted(os.listdir(PASTA_ETAPAS)):
     if f.endswith('.csv'):
-        try: dfs_salvos.append(ler_csv_auto(os.path.join(PASTA_ETAPAS, f)))
-        except Exception as e: st.warning(f"Não foi possível ler a etapa salva '{f}': {e}")
+        try: 
+            df_lido = ler_csv_auto(os.path.join(PASTA_ETAPAS, f))
+            if not df_lido.empty:
+                dfs_salvos.append(df_lido)
+        except Exception as e: 
+            st.warning(f"Não foi possível ler a etapa salva '{f}': {e}")
 df_completo = pd.concat(dfs_salvos, ignore_index=True) if dfs_salvos else pd.DataFrame()
 if up:
     df_upload = ler_csv_auto(up)
-    if st.sidebar.button("Salvar etapa importada"):
-        with open(os.path.join(PASTA_ETAPAS, up.name), "wb") as f: f.write(up.getvalue())
-        st.sidebar.success("Etapa salva! Recarregando..."); st.rerun()
-    df_completo = pd.concat([df_completo, df_upload], ignore_index=True)
+    if not df_upload.empty:
+        if st.sidebar.button("Salvar etapa importada"):
+            with open(os.path.join(PASTA_ETAPAS, up.name), "wb") as f: f.write(up.getvalue())
+            st.sidebar.success("Etapa salva! Recarregando..."); st.rerun()
+        df_completo = pd.concat([df_completo, df_upload], ignore_index=True)
 if df_completo.empty:
-    st.info("Nenhuma etapa de corrida encontrada. Importe um arquivo CSV para começar."); st.stop()
+    st.info("Nenhuma etapa de corrida encontrada. Importe um arquivo CSV ou verifique os arquivos na pasta 'etapas_salvas'.")
+    st.stop()
 MAPA_PILOTO = None
 for ext in (".csv", ".xlsx"):
     f = f"pilotos_categoria{ext}";
@@ -119,10 +134,9 @@ if not df_final.empty:
     sel_v = st.sidebar.multiselect("Voltas", voltas, default=voltas)
     df_final = df_final[df_final[COL_VOLTA].isin(sel_v)].reset_index(drop=True)
 
-# ===== ABAS =====
+# ===== ABAS (o restante do código não precisa de alterações) =====
 tab_titles = ["Comparativo Visual", "Geral", "Volta Rápida", "Velocidade", "Gráficos", "Histórico", "Exportar"]
 tabs = st.tabs(tab_titles)
-
 with tabs[0]:
     st.header("📊 Comparativo Visual")
     if len(sel_p) < 2:
@@ -207,14 +221,12 @@ with tabs[0]:
             html += "</tr>"
     html += "</tbody></table></div>"
     st.markdown(html, unsafe_allow_html=True)
-
 with tabs[1]:
     st.subheader("📋 Tabela Completa de Voltas")
     cols_to_show = [COL_PILOTO, COL_CAT, "Horário", COL_VOLTA] + COLS_TEMPO + [COL_VEL]
     show = df_final[cols_to_show].copy()
     for c in COLS_TEMPO: show[c] = show[c].apply(fmt_tempo)
     st.dataframe(show, hide_index=True, use_container_width=True)
-
 with tabs[2]:
     st.subheader("🏆 Melhor Volta de Cada Piloto")
     if not df_final.empty and COL_PILOTO in df_final and COL_TT in df_final:
@@ -223,7 +235,6 @@ with tabs[2]:
         best_df = df_best[cols_to_show_best].copy().sort_values(by=COL_TT)
         for c in COLS_TEMPO: best_df[c] = best_df[c].apply(fmt_tempo)
         st.dataframe(best_df, hide_index=True, use_container_width=True)
-
 with tabs[3]:
     st.subheader("🚀 Maior Top Speed de Cada Piloto")
     if not df_final.empty and COL_VEL in df_final and not df_final[COL_VEL].dropna().empty:
@@ -236,7 +247,6 @@ with tabs[3]:
         st.dataframe(sp_df, hide_index=True, use_container_width=True)
     else:
         st.info("Não há dados de velocidade disponíveis para os pilotos e voltas selecionados.")
-
 with tabs[4]:
     st.header("📈 Análises Gráficas")
     if df_final.empty or len(sel_p) == 0:
@@ -267,11 +277,9 @@ with tabs[4]:
     ax1.grid(True, linestyle='--', alpha=0.6)
     ax1.yaxis.set_major_locator(mticker.MaxNLocator(integer=True, nbins=10)); ax1.legend()
     st.pyplot(fig1, use_container_width=True)
-
 with tabs[5]:
     st.subheader("🗂️ Etapas Salvas"); files_in_folder = sorted(os.listdir(PASTA_ETAPAS))
     st.dataframe(pd.DataFrame(files_in_folder, columns=["Arquivo"]), hide_index=True)
-
 with tabs[6]:
     st.subheader("📤 Exportar dados filtrados"); buf = io.BytesIO(); out = df_final.copy();
     for c in COLS_TEMPO: 
