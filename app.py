@@ -127,7 +127,6 @@ if not df_final.empty:
     sel_v = st.sidebar.multiselect("Voltas", voltas, default=voltas)
     df_final = df_final[df_final[COL_VOLTA].isin(sel_v)].reset_index(drop=True)
 
-# ===== CORREÇÃO: CÁLCULO DOS MELHORES VALORES GLOBAIS =====
 best_lap = df_final[COL_TT].min() if not df_final.empty else None
 best_spd = df_final[COL_VEL].max() if not df_final.empty and COL_VEL in df_final else None
 best_sec = {}
@@ -226,43 +225,47 @@ with tabs[0]:
     html += "</tbody></table></div>"
     st.markdown(html, unsafe_allow_html=True)
 
-# ===== ABA "GERAL" - CORRIGIDA PARA MOSTRAR ESTILOS =====
+# ===== ABA "GERAL" - CÓDIGO CORRIGIDO E ROBUSTO =====
 with tabs[1]:
     st.subheader("📋 Tabela Completa de Voltas")
+    
+    # Prepara o dataframe para exibição
     cols_to_show = [COL_PILOTO, COL_CAT, "Horário", COL_VOLTA] + COLS_TEMPO + [COL_VEL]
-    show = df_final[cols_to_show].copy()
+    # Garante que apenas colunas existentes em df_final sejam usadas
+    cols_existentes = [col for col in cols_to_show if col in df_final.columns]
+    show = df_final[cols_existentes].copy()
+
+    # Formata as colunas de tempo para string
     for c in COLS_TEMPO:
         if c in show.columns:
             show[c] = show[c].apply(fmt_tempo)
     
+    # Função de estilo refeita para ser mais segura
     def sty_all(row):
+        styles = pd.Series('', index=row.index)
         original_row = df_final.loc[row.name]
-        styles = [''] * len(row)
-        
+
         # Destaque melhor volta (Azul)
-        if pd.notna(original_row.get(COL_TT)) and original_row.get(COL_TT) == best_lap:
-            idx = row.index.get_loc(COL_TT)
-            styles[idx] = 'color: #00BFFF; font-weight: bold;'
+        if best_lap and pd.notna(original_row.get(COL_TT)) and original_row.get(COL_TT) == best_lap:
+            styles[COL_TT] = 'color: #00BFFF; font-weight: bold;'
         
         # Destaque melhores setores (Roxo)
         for sec_col in [COL_S1, COL_S2, COL_S3]:
-            if sec_col in original_row and pd.notna(original_row.get(sec_col)) and sec_col in best_sec and original_row.get(sec_col) == best_sec[sec_col]:
-                idx = row.index.get_loc(sec_col)
-                styles[idx] = 'background-color: #483D8B; color: white;'
+            if sec_col in best_sec and pd.notna(original_row.get(sec_col)) and original_row.get(sec_col) == best_sec[sec_col]:
+                styles[sec_col] = 'background-color: #483D8B; color: white;'
         
         # Destaque melhor velocidade (Verde)
-        if COL_VEL in original_row and pd.notna(original_row.get(COL_VEL)) and original_row.get(COL_VEL) == best_spd:
-            idx = row.index.get_loc(COL_VEL)
-            styles[idx] = 'background-color: #2E8B57; color: white;'
+        if best_spd and pd.notna(original_row.get(COL_VEL)) and original_row.get(COL_VEL) == best_spd:
+            styles[COL_VEL] = 'background-color: #2E8B57; color: white;'
             
         return styles
 
+    # Aplica o estilo apenas se o dataframe não estiver vazio
     if not show.empty:
         st.dataframe(show.style.apply(sty_all, axis=1), hide_index=True, use_container_width=True)
     else:
         st.dataframe(show, hide_index=True, use_container_width=True)
 
-# ... (Restante do código das abas sem alterações)...
 with tabs[2]:
     st.subheader("🏆 Melhor Volta de Cada Piloto")
     if not df_final.empty and COL_PILOTO in df_final and COL_TT in df_final:
@@ -273,6 +276,7 @@ with tabs[2]:
             if c in best_df.columns:
                 best_df[c] = best_df[c].apply(fmt_tempo)
         st.dataframe(best_df, hide_index=True, use_container_width=True)
+
 with tabs[3]:
     st.subheader("🚀 Maior Top Speed de Cada Piloto")
     if not df_final.empty and COL_VEL in df_final and not df_final[COL_VEL].dropna().empty:
@@ -285,6 +289,7 @@ with tabs[3]:
         st.dataframe(sp_df, hide_index=True, use_container_width=True)
     else:
         st.info("Não há dados de velocidade disponíveis para os pilotos e voltas selecionados.")
+
 with tabs[4]:
     st.header("📈 Análises Gráficas")
     if df_final.empty or len(sel_p) == 0:
@@ -315,9 +320,11 @@ with tabs[4]:
     ax1.grid(True, linestyle='--', alpha=0.6)
     ax1.yaxis.set_major_locator(mticker.MaxNLocator(integer=True, nbins=10)); ax1.legend()
     st.pyplot(fig1, use_container_width=True)
+
 with tabs[5]:
     st.subheader("🗂️ Etapas Salvas"); files_in_folder = sorted(os.listdir(PASTA_ETAPAS))
     st.dataframe(pd.DataFrame(files_in_folder, columns=["Arquivo"]), hide_index=True)
+
 with tabs[6]:
     st.subheader("📤 Exportar dados filtrados"); buf = io.BytesIO(); out = df_final.copy();
     for c in COLS_TEMPO: 
