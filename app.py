@@ -120,27 +120,25 @@ if not df_final.empty:
 tab_titles = ["Comparativo Visual", "Geral", "Volta Rápida", "Velocidade", "Gráficos", "Histórico", "Exportar"]
 tabs = st.tabs(tab_titles)
 
-# ===== ABA "COMPARATIVO VISUAL" - COM A CORREÇÃO DO BUG =====
+# ===== ABA "COMPARATIVO VISUAL" - TOTALMENTE REFEITA COM AS CORREÇÕES =====
 with tabs[0]:
-    st.header("📊 Comparativo Visual de Voltas")
+    st.header("📊 Comparativo Visual")
     if len(sel_p) < 2:
         st.warning("⚠️ Por favor, selecione de 2 a 5 pilotos na barra lateral para fazer a comparação."); st.stop()
 
     col1, col2 = st.columns(2)
     with col1:
-        tipo_analise = st.radio("Selecione o Tipo de Análise:",("Tempo de Volta", "Velocidade Máxima"), horizontal=True, key="tipo_analise")
+        tipo_analise = st.radio("Tipo de Análise:", ("Tempo de Volta", "Velocidade Máxima"), horizontal=True, key="tipo_analise")
     with col2:
         opcoes_referencia = ["-- Comparação Sequencial --"] + sel_p
-        modo_comparacao = st.selectbox("Selecione o modo de comparação:", opcoes_referencia, key="modo_comp")
+        modo_comparacao = st.selectbox("Modo de Comparação:", opcoes_referencia, key="modo_comp")
     st.markdown("---")
 
-    if tipo_analise == "Tempo de Volta":
-        dados_pilotos = [df_final[df_final[COL_PILOTO] == p][[COL_VOLTA, COL_TT]].set_index(COL_VOLTA).rename(columns={COL_TT: p}) for p in sel_p]
-        coluna_dado = COL_TT; unidade = ""; y_label = "Tempo de Volta (M:SS)"
-    else: # Velocidade Máxima
-        dados_pilotos = [df_final[df_final[COL_PILOTO] == p][[COL_VOLTA, COL_VEL]].set_index(COL_VOLTA).rename(columns={COL_VEL: p}) for p in sel_p]
-        coluna_dado = COL_VEL; unidade = "km/h"; y_label = f"Velocidade Máxima ({unidade})"
+    coluna_dado = COL_TT if tipo_analise == "Tempo de Volta" else COL_VEL
+    unidade = "" if tipo_analise == "Tempo de Volta" else "km/h"
+    y_label = "Tempo de Volta (M:SS)" if tipo_analise == "Tempo de Volta" else f"Velocidade Máxima ({unidade})"
 
+    dados_pilotos = [df_final[df_final[COL_PILOTO] == p][[COL_VOLTA, coluna_dado]].set_index(COL_VOLTA).rename(columns={coluna_dado: p}) for p in sel_p]
     df_comp = dados_pilotos[0] if dados_pilotos else pd.DataFrame()
     if len(dados_pilotos) > 1:
         for i in range(1, len(dados_pilotos)): df_comp = df_comp.join(dados_pilotos[i], how='outer')
@@ -158,9 +156,9 @@ with tabs[0]:
         piloto_df_plot = df_final[df_final[COL_PILOTO] == p].sort_values(by=COL_VOLTA)
         dados_y = piloto_df_plot[coluna_dado].dt.total_seconds() if tipo_analise == "Tempo de Volta" else piloto_df_plot[coluna_dado]
         if piloto_referencia and p == piloto_referencia:
-            ax.plot(piloto_df_plot[COL_VOLTA], dados_y, marker='o', markersize=7, linewidth=3, linestyle='--', label=f"{p} (Ref.)", zorder=10)
+            ax.plot(piloto_df_plot[COL_VOLTA], dados_y.dropna(), marker='o', markersize=7, linewidth=3, linestyle='--', label=f"{p} (Ref.)", zorder=10)
         else:
-            ax.plot(piloto_df_plot[COL_VOLTA], dados_y, marker='o', markersize=6, linewidth=2, label=p, alpha=0.8)
+            ax.plot(piloto_df_plot[COL_VOLTA], dados_y.dropna(), marker='o', markersize=6, linewidth=2, label=p, alpha=0.8)
 
     ax.set_xlabel("Volta"); ax.set_ylabel(y_label); ax.set_title(f"Comparativo de {tipo_analise}")
     ax.legend(fontsize='small'); ax.grid(True, which='both', linestyle='--', linewidth=0.5)
@@ -169,12 +167,13 @@ with tabs[0]:
     st.markdown("---")
     
     st.subheader(f"Análise Detalhada: {tipo_analise}")
-    common_css = """<style> /* ... CSS ... */ </style>""" # CSS omitido para brevidade
+    # CORREÇÃO: CSS foi movido para fora do loop e garantido que será sempre incluído
+    common_css = """<style> .table-container { overflow-x: auto; } .comp-table { width: 100%; border-collapse: collapse; font-size: 0.9em; } .comp-table th, .comp-table td { padding: 6px 8px; text-align: center; white-space: nowrap; } .comp-table th { font-family: sans-serif; border-bottom: 2px solid #444; } .comp-table td { border-bottom: 1px solid #333; line-height: 1.3; } .comp-table tr:hover td { background-color: #2e2e2e; } .comp-table b { font-size: 1.1em; } .diff-span { font-size: 0.9em; display: block; } .diff-pos { color: #ff4d4d !important; } .diff-neg { color: #4dff4d !important; } .diff-zero { color: #888; } .fastest-lap { background-color: #483D8B; border-radius: 4px; } </style>"""
     html = f"{common_css}<div class='table-container'><table class='comp-table'><thead><tr>"
 
     if not piloto_referencia: # Modo Sequencial
         for i, p in enumerate(sel_p):
-            html += f"<th>{p}</th>"
+            html += f"<th>{p}</th>";
             if i < len(sel_p) - 1: html += "<th>VS</th>"
     else: # Modo Referência
         for p in sel_p: html += f"<th>{p}</th>"
@@ -187,25 +186,25 @@ with tabs[0]:
             if not piloto_referencia: # Modo Sequencial
                 for i, p in enumerate(sel_p):
                     dado_atual = row.get(p)
-                    is_fastest = fastest_laps.get(p) and dado_atual == fastest_laps.get(p)
+                    is_fastest = fastest_laps.get(p) and pd.notna(dado_atual) and dado_atual == fastest_laps.get(p)
                     cell_class = "fastest-lap" if is_fastest and tipo_analise == "Tempo de Volta" else ""
-                    # ===== LINHA CORRIGIDA AQUI (SEQUENCIAL) =====
+                    # CORREÇÃO: Verificação de NaN para velocidade
                     valor_str = fmt_tempo(dado_atual) if tipo_analise == "Tempo de Volta" else (f"{dado_atual:.1f}" if pd.notna(dado_atual) else "---")
                     html += f"<td class='{cell_class}'><b>{row[COL_VOLTA]}</b><br>{valor_str} {unidade}</td>"
                     if i < len(sel_p) - 1:
                         dado_prox = row.get(sel_p[i+1])
                         diff = dado_prox - dado_atual if pd.notna(dado_atual) and pd.notna(dado_prox) else None
-                        html += formatar_diferenca_html(diff, unit="" if tipo_analise == "Tempo de Volta" else "km/h")
+                        html += formatar_diferenca_html(diff, unit=unidade)
             else: # Modo Referência
                 dado_ref = row.get(piloto_referencia)
                 for p in sel_p:
                     dado_atual = row.get(p); diff_str = ""
                     if p != piloto_referencia:
                         diff = dado_atual - dado_ref if pd.notna(dado_atual) and pd.notna(dado_ref) else None
-                        diff_str = f"<span class='diff-span'>{formatar_diff_span(diff, unit='' if tipo_analise == 'Tempo de Volta' else 'km/h')}</span>"
-                    is_fastest = fastest_laps.get(p) and dado_atual == fastest_laps.get(p)
+                        diff_str = f"<span class='diff-span'>{formatar_diff_span(diff, unit=unidade)}</span>"
+                    is_fastest = fastest_laps.get(p) and pd.notna(dado_atual) and dado_atual == fastest_laps.get(p)
                     cell_class = "fastest-lap" if is_fastest and tipo_analise == "Tempo de Volta" else ""
-                    # ===== LINHA CORRIGIDA AQUI (REFERÊNCIA) =====
+                    # CORREÇÃO: Verificação de NaN para velocidade
                     valor_str = fmt_tempo(dado_atual) if tipo_analise == "Tempo de Volta" else (f"{dado_atual:.1f}" if pd.notna(dado_atual) else "---")
                     html += f"<td class='{cell_class}'><b>{row[COL_VOLTA]}</b><br>{valor_str} {unidade}{diff_str}</td>"
             html += "</tr>"
@@ -276,7 +275,7 @@ with tabs[4]:
             ax3.set_ylabel("Tempo da volta (segundos)"); ax3.set_title("Composição da Melhor Volta por Setores"); ax3.legend()
             st.pyplot(fig3, use_container_width=True)
         else: st.info("Não há dados de setores para a melhor volta dos pilotos selecionados.")
-    except KeyError: st.error("Colunas de setores (Setor 1, Setor 2, Setor 3) não encontradas nos dados.")
+    except (KeyError, ValueError): st.error("Dados de setores inválidos ou não encontrados para gerar o gráfico.")
 with tabs[5]:
     st.subheader("🗂️ Etapas Salvas"); files_in_folder = sorted(os.listdir(PASTA_ETAPAS))
     st.dataframe(pd.DataFrame(files_in_folder, columns=["Arquivo"]), hide_index=True)
