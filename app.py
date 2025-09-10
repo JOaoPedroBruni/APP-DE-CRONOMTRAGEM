@@ -10,7 +10,7 @@ from io import StringIO
 # ---------------- Configuração da Página ----------------
 st.set_page_config(page_title="Plataforma Cronometragem", layout="wide")
 
-# --- FUNÇÃO DE LOGIN (COM NOVA ESTÉTICA) ---
+# --- FUNÇÃO DE LOGIN ---
 def check_password():
     """Retorna `True` se o usuário fez o login, `False` caso contrário."""
     def login_form():
@@ -35,137 +35,155 @@ def check_password():
     login_form()
     return False
 
-# --- FUNÇÃO PRINCIPAL DA APLICAÇÃO ---
+# --- FUNÇÕES AUXILIARES (SEU CÓDIGO ORIGINAL) ---
+COL_LOCAL, COL_EVENTO = "Local", "Evento"
+COL_CAT, COL_PILOTO = "CATEGORIA", "Piloto"
+COL_VOLTA, COL_TT = "Volta", "Tempo Total da Volta"
+COL_S1, COL_S2, COL_S3 = "Setor 1", "Setor 2", "Setor 3"
+COL_VEL = "TOP SPEED"
+COLS_TEMPO = [COL_TT, COL_S1, COL_S2, COL_S3]
+
+def parse_tempo(txt):
+    if pd.isna(txt): return pd.NaT
+    s = str(txt).strip().replace(',', '.')
+    if re.fullmatch(r"\d{1,2}:\d{2}\.\d{1,3}", s):
+        m, r = s.split(':')
+        return pd.to_timedelta(int(m) * 60 + float(r), unit='s')
+    if re.fullmatch(r"\d{1,3}\.\d{1,3}", s):
+        return pd.to_timedelta(float(s), unit='s')
+    return pd.to_timedelta(s, errors='coerce')
+
+def fmt_tempo(td):
+    if pd.isna(td) or td is None: return "---"
+    s = td.total_seconds()
+    m = int((s % 1) * 1000)
+    n = int(s // 60)
+    c = int(s % 60)
+    return f"{n:01d}:{c:02d}.{m:03d}"
+    
+def formatar_diferenca_html(td_or_float, unit=""):
+    if pd.isna(td_or_float): return "<td></td>"
+    value = td_or_float.total_seconds() if isinstance(td_or_float, pd.Timedelta) else td_or_float
+    if pd.isna(value): return "<td></td>"
+    sinal = "+" if value > 0 else ""
+    classe = "diff-pos" if value > 0 else "diff-neg"
+    icone = "▲" if value > 0 else "▼"
+    if value == 0: return f"<td>0.000 {unit}</td>"
+    return f"<td class='{classe}'>{sinal}{value:.3f} {icone} {unit}</td>"
+
+def formatar_diff_span(td_or_float, unit=""):
+    if pd.isna(td_or_float): return ""
+    value = td_or_float.total_seconds() if isinstance(td_or_float, pd.Timedelta) else td_or_float
+    if pd.isna(value): return ""
+    if value == 0: return f"<span class='diff-zero'>0.000 {unit}</span>"
+    sinal = "+" if value > 0 else ""
+    classe = "diff-pos" if value > 0 else "diff-neg"
+    icone = "▲" if value > 0 else "▼"
+    return f"<span class='{classe}'>{sinal}{value:.3f} {icone} {unit}</span>"
+
+def normalizar(df):
+    for c in COLS_TEMPO:
+        if c in df.columns: df[c] = df[c].apply(parse_tempo)
+    if COL_VEL in df.columns:
+        df[COL_VEL] = pd.to_numeric(df[COL_VEL].astype(str).str.replace(',', '.'), errors='coerce')
+    return df
+
+def ler_csv_auto(src, filename=""):
+    local_nome, evento_nome = "Desconhecido", "Sessão Desconhecida"
+    if filename:
+        base = os.path.basename(filename).upper().replace('- LAPTIMES.CSV', '').replace('.CSV', '').strip()
+        parts = base.split(' - ')
+        if len(parts) > 1:
+            local_nome, evento_nome = parts[0].strip(), ' - '.join(parts[1:]).strip()
+        else:
+            evento_nome = parts[0].strip()
+    try:
+        df = pd.read_csv(src, sep=';', encoding='windows-1252', low_memory=False)
+        if COL_PILOTO in df.columns and COL_VOLTA in df.columns:
+            df[COL_LOCAL], df[COL_EVENTO] = local_nome, evento_nome
+            return normalizar(df)
+    except Exception: pass
+    raw = src.getvalue().decode("utf-8", "ignore") if hasattr(src, "getvalue") else open(src, "r", encoding="utf-8", errors="ignore").read()
+    lines = [l.strip() for l in raw.splitlines() if l.strip()]
+    try:
+        hdr_index = next(i for i, l in enumerate(lines) if "Lap Tm" in l and "Lap" in l)
+        df_alt = pd.read_csv(StringIO("\n".join(lines[hdr_index:])), sep=',', quotechar='"', engine='python')
+        hora_pat = re.compile(r"^\d{1,2}:\d{2}:\d{2}\.\d{1,3}$")
+        col_hora = next(c for c in df_alt.columns if df_alt[c].astype(str).str.match(hora_pat).sum() > 0)
+        df_alt["Piloto_tmp"] = df_alt[col_hora].where(~df_alt[col_hora].str.match(hora_pat, na=False)).ffill()
+        df_alt = df_alt.dropna(subset=['Lap', 'Lap Tm'])
+        df_map = pd.DataFrame({
+            COL_LOCAL: local_nome, COL_EVENTO: evento_nome, COL_CAT: "N/A", COL_PILOTO: df_alt["Piloto_tmp"],
+            "Horário": df_alt[col_hora], COL_VOLTA: df_alt["Lap"], COL_TT: df_alt["Lap Tm"], COL_S1: df_alt.get("S1 Tm"),
+            COL_S2: df_alt.get("S2 Tm"), COL_S3: df_alt.get("S3 Tm"), COL_VEL: df_alt.get("Speed"),
+        })
+        return normalizar(df_map)
+    except (StopIteration, ValueError, KeyError): return pd.DataFrame()
+
+# --- FUNÇÃO PRINCIPAL DA APLICAÇÃO (MODIFICADA) ---
 def main_app():
-    """
-    Contém toda a lógica da aplicação de cronometragem.
-    Só é executada após o login bem-sucedido.
-    """
     st.title("🏎️ Plataforma de Cronometragem Multi-Sessão")
     if st.sidebar.button("Logout"):
         st.session_state["password_correct"] = False
         st.rerun()
 
     PASTA_ETAPAS = "etapas_salvas"
-    os.makedirs(PASTA_ETAPAS, exist_ok=True)
     PASTA_MAPAS = "mapas"
+    os.makedirs(PASTA_ETAPAS, exist_ok=True)
     os.makedirs(PASTA_MAPAS, exist_ok=True)
-
-    COL_LOCAL, COL_EVENTO = "Local", "Evento"
-    COL_CAT, COL_PILOTO = "CATEGORIA", "Piloto"
-    COL_VOLTA, COL_TT = "Volta", "Tempo Total da Volta"
-    COL_S1, COL_S2, COL_S3 = "Setor 1", "Setor 2", "Setor 3"
-    COL_VEL = "TOP SPEED"
-    COLS_TEMPO = [COL_TT, COL_S1, COL_S2, COL_S3]
-    EXTS_MAPA = (".png", ".jpg", ".jpeg", ".svg", ".gif")
-
-    def parse_tempo(txt):
-        if pd.isna(txt): return pd.NaT
-        s = str(txt).strip().replace(',', '.')
-        if re.fullmatch(r"\d{1,2}:\d{2}\.\d{1,3}", s):
-            m, r = s.split(':')
-            return pd.to_timedelta(int(m) * 60 + float(r), unit='s')
-        if re.fullmatch(r"\d{1,3}\.\d{1,3}", s):
-            return pd.to_timedelta(float(s), unit='s')
-        return pd.to_timedelta(s, errors='coerce')
-
-    def fmt_tempo(td):
-        if pd.isna(td) or td is None: return "---"
-        s = td.total_seconds()
-        m = int((s % 1) * 1000)
-        n = int(s // 60)
-        c = int(s % 60)
-        return f"{n:01d}:{c:02d}.{m:03d}"
     
-    def formatar_diferenca_html(td_or_float, unit=""):
-        if pd.isna(td_or_float): return "<td></td>"
-        value = td_or_float.total_seconds() if isinstance(td_or_float, pd.Timedelta) else td_or_float
-        if pd.isna(value): return "<td></td>"
-        sinal = "+" if value > 0 else ""
-        classe = "diff-pos" if value > 0 else "diff-neg"
-        icone = "▲" if value > 0 else "▼"
-        if value == 0: return f"<td>0.000 {unit}</td>"
-        return f"<td class='{classe}'>{sinal}{value:.3f} {icone} {unit}</td>"
+    # ===== FERRAMENTA DE CONSOLIDAÇÃO (PARA USO LOCAL NO SEU PC) =====
+    with st.sidebar.expander("⚙️ Ferramenta de Consolidação (Uso Local)"):
+        st.info("Use esta ferramenta no seu PC para juntar vários arquivos de uma etapa em um só.")
+        uploaded_files = st.file_uploader("Carregar múltiplos arquivos CSV", type="csv", accept_multiple_files=True)
+        
+        if uploaded_files:
+            nome_consolidado = st.text_input("Nome do arquivo consolidado final:", "Etapa_Consolidada.csv")
+            if st.button("Salvar Etapa Consolidada"):
+                if nome_consolidado:
+                    dfs_novos = [ler_csv_auto(f, filename=f.name) for f in uploaded_files]
+                    df_concatenado = pd.concat(dfs_novos, ignore_index=True)
+                    
+                    # Salva uma versão com os tempos já processados para o CSV final
+                    caminho_salvar = os.path.join(PASTA_ETAPAS, nome_consolidado)
+                    df_concatenado.to_csv(caminho_salvar, sep=';', index=False, encoding='utf-8-sig')
+                    st.success(f"Arquivo '{nome_consolidado}' salvo na pasta '{PASTA_ETAPAS}'!")
+                else:
+                    st.warning("Por favor, defina um nome para o arquivo consolidado.")
 
-    def formatar_diff_span(td_or_float, unit=""):
-        if pd.isna(td_or_float): return ""
-        value = td_or_float.total_seconds() if isinstance(td_or_float, pd.Timedelta) else td_or_float
-        if pd.isna(value): return ""
-        if value == 0: return f"<span class='diff-zero'>0.000 {unit}</span>"
-        sinal = "+" if value > 0 else ""
-        classe = "diff-pos" if value > 0 else "diff-neg"
-        icone = "▲" if value > 0 else "▼"
-        return f"<span class='{classe}'>{sinal}{value:.3f} {icone} {unit}</span>"
-
-    def normalizar(df):
-        for c in COLS_TEMPO:
-            if c in df.columns: df[c] = df[c].apply(parse_tempo)
-        if COL_VEL in df.columns:
-            df[COL_VEL] = pd.to_numeric(df[COL_VEL].astype(str).str.replace(',', '.'), errors='coerce')
-        return df
-
-    def ler_csv_auto(src, filename=""):
-        local_nome, evento_nome = "Desconhecido", "Sessão Desconhecida"
-        if filename:
-            base = os.path.basename(filename).upper().replace('- LAPTIMES.CSV', '').replace('.CSV', '').strip()
-            parts = base.split(' - ')
-            if len(parts) > 1:
-                local_nome, evento_nome = parts[0].strip(), ' - '.join(parts[1:]).strip()
-            else:
-                evento_nome = parts[0].strip()
-        try:
-            df = pd.read_csv(src, sep=';', encoding='windows-1252', low_memory=False)
-            if COL_PILOTO in df.columns and COL_VOLTA in df.columns:
-                df[COL_LOCAL], df[COL_EVENTO] = local_nome, evento_nome
-                return normalizar(df)
-        except Exception: pass
-        raw = src.getvalue().decode("utf-8", "ignore") if hasattr(src, "getvalue") else open(src, "r", encoding="utf-8", errors="ignore").read()
-        lines = [l.strip() for l in raw.splitlines() if l.strip()]
-        try:
-            hdr_index = next(i for i, l in enumerate(lines) if "Lap Tm" in l and "Lap" in l)
-            df_alt = pd.read_csv(StringIO("\n".join(lines[hdr_index:])), sep=',', quotechar='"', engine='python')
-            hora_pat = re.compile(r"^\d{1,2}:\d{2}:\d{2}\.\d{1,3}$")
-            col_hora = next(c for c in df_alt.columns if df_alt[c].astype(str).str.match(hora_pat).sum() > 0)
-            df_alt["Piloto_tmp"] = df_alt[col_hora].where(~df_alt[col_hora].str.match(hora_pat, na=False)).ffill()
-            df_alt = df_alt.dropna(subset=['Lap', 'Lap Tm'])
-            df_map = pd.DataFrame({
-                COL_LOCAL: local_nome, COL_EVENTO: evento_nome, COL_CAT: "N/A", COL_PILOTO: df_alt["Piloto_tmp"],
-                "Horário": df_alt[col_hora], COL_VOLTA: df_alt["Lap"], COL_TT: df_alt["Lap Tm"], COL_S1: df_alt.get("S1 Tm"),
-                COL_S2: df_alt.get("S2 Tm"), COL_S3: df_alt.get("S3 Tm"), COL_VEL: df_alt.get("Speed"),
-            })
-            return normalizar(df_map)
-        except (StopIteration, ValueError, KeyError): return pd.DataFrame()
-
-    st.sidebar.header("📁 Importar Dados da Etapa")
-    uploaded_files = st.sidebar.file_uploader("Carregar arquivos CSV da etapa", type="csv", accept_multiple_files=True)
+    # ===== LÓGICA PRINCIPAL PARA ANÁLISE ONLINE (LÊ DA PASTA) =====
+    st.sidebar.header("📁 Selecionar Etapa para Análise")
     df_completo = pd.DataFrame()
-    if uploaded_files:
-        dfs_novos = []
-        for up_file in uploaded_files:
-            df_upload = ler_csv_auto(up_file, filename=up_file.name)
-            if not df_upload.empty: dfs_novos.append(df_upload)
-        if dfs_novos:
-            df_novos_concatenados = pd.concat(dfs_novos, ignore_index=True)
-            df_completo = pd.concat([df_completo, df_novos_concatenados], ignore_index=True).drop_duplicates()
-            st.sidebar.subheader("Salvar Dados")
-            if st.sidebar.button("Salvar Arquivos Importados (Separados)"):
-                for up_file in uploaded_files:
-                    with open(os.path.join(PASTA_ETAPAS, up_file.name), "wb") as f: f.write(up_file.getvalue())
-                st.sidebar.success(f"{len(dfs_novos)} arquivo(s) salvo(s)!")
-            nome_etapa_consolidada = st.sidebar.text_input("Nome para a etapa consolidada:", "ETAPA_CONSOLIDADA.csv")
-            if st.sidebar.button("Salvar Etapa Consolidada (Arquivo Único)"):
-                if nome_etapa_consolidada:
-                    df_para_salvar = df_novos_concatenados.copy()
-                    for col in COLS_TEMPO:
-                        if col in df_para_salvar.columns: df_para_salvar[col] = df_para_salvar[col].apply(fmt_tempo)
-                    caminho_salvar = os.path.join(PASTA_ETAPAS, nome_etapa_consolidada)
-                    df_para_salvar.to_csv(caminho_salvar, sep=';', index=False, encoding='utf-8-sig')
-                    st.sidebar.success(f"Etapa consolidada salva como '{nome_etapa_consolidada}'!")
-                else: st.sidebar.warning("Por favor, insira um nome para o arquivo consolidado.")
-    if df_completo.empty:
-        st.info("⬅️ Nenhuma etapa carregada. Importe um ou mais arquivos CSV na barra lateral para começar.")
+
+    @st.cache_data
+    def carregar_dados_da_pasta(caminho_do_arquivo):
+        return ler_csv_auto(caminho_do_arquivo, filename=os.path.basename(caminho_do_arquivo))
+
+    try:
+        arquivos_disponiveis = [f for f in os.listdir(PASTA_ETAPAS) if f.lower().endswith('.csv')]
+        if not arquivos_disponiveis:
+            st.sidebar.warning(f"Nenhum arquivo .csv encontrado na pasta '{PASTA_ETAPAS}'.")
+            st.info(f"Adicione arquivos CSV à pasta '{PASTA_ETAPAS}' no seu GitHub para analisá-los.")
+            st.stop()
+
+        opcoes = ["-- Escolha uma etapa --"] + sorted(arquivos_disponiveis)
+        arquivo_selecionado = st.sidebar.selectbox("Etapas disponíveis:", opcoes)
+
+        if arquivo_selecionado != "-- Escolha uma etapa --":
+            caminho_completo = os.path.join(PASTA_ETAPAS, arquivo_selecionado)
+            with st.spinner(f"Carregando dados de '{arquivo_selecionado}'..."):
+                df_completo = carregar_dados_da_pasta(caminho_completo)
+            st.sidebar.success(f"Analisando: {arquivo_selecionado}")
+
+    except FileNotFoundError:
+        st.error(f"ERRO: A pasta '{PASTA_ETAPAS}' não foi encontrada. Crie-a no seu projeto e adicione os arquivos via Git.")
         st.stop()
 
+    if df_completo.empty:
+        st.info("⬅️ Por favor, selecione uma etapa na barra lateral para começar a análise.")
+        st.stop()
+
+    # ===== SEU CÓDIGO DE FILTROS E ANÁLISE (ORIGINAL E SEM ALTERAÇÕES) =====
     MAPA_PILOTO = None
     for ext in (".csv", ".xlsx"):
         f = f"pilotos_categoria{ext}"
@@ -194,6 +212,8 @@ def main_app():
             if not categorias_disponiveis: st.sidebar.warning(f"Nenhuma categoria encontrada para o evento '{ev_selecionado}'.")
             cats_selecionadas = st.sidebar.multiselect("Categorias", categorias_disponiveis, default=categorias_disponiveis)
             df = df_filtrado_ev[df_filtrado_ev[COL_CAT].isin(cats_selecionadas)]
+            
+            EXTS_MAPA = (".png", ".jpg", ".jpeg", ".svg", ".gif")
             mapas_disp = [f for f in os.listdir(PASTA_MAPAS) if f.lower().endswith(EXTS_MAPA)]
             default_map = "— nenhum —"
             mapa_encontrado = next((f for f in mapas_disp if os.path.splitext(f)[0].lower() == loc_selecionado.lower()), None)
@@ -201,9 +221,11 @@ def main_app():
             opcoes_mapa = ["— nenhum —"] + mapas_disp
             map_select = st.sidebar.selectbox("🗺️ Escolher mapa", opcoes_mapa, index=opcoes_mapa.index(default_map))
             if map_select != "— nenhum —": st.sidebar.image(os.path.join(PASTA_MAPAS, map_select), use_container_width=True)
+            
             pilotos_disponiveis = sorted(df[COL_PILOTO].dropna().unique())
             pilotos_selecionados = st.sidebar.multiselect("Pilotos", pilotos_disponiveis, default=pilotos_disponiveis[:5])
             df_final = df[df[COL_PILOTO].isin(pilotos_selecionados)]
+            
             if not df_final.empty:
                 voltas = sorted(df_final[COL_VOLTA].dropna().unique())
                 voltas_selecionadas = st.sidebar.multiselect("Voltas", voltas, default=voltas)
