@@ -89,6 +89,7 @@ def normalizar(df):
         df[COL_VEL] = pd.to_numeric(df[COL_VEL].astype(str).str.replace(',', '.'), errors='coerce')
     return df
 
+# --- FUNÇÃO DE LEITURA CORRIGIDA ---
 def ler_csv_auto(src, filename=""):
     local_nome, evento_nome = "Desconhecido", "Sessão Desconhecida"
     if filename:
@@ -98,14 +99,30 @@ def ler_csv_auto(src, filename=""):
             local_nome, evento_nome = parts[0].strip(), ' - '.join(parts[1:]).strip()
         else:
             evento_nome = parts[0].strip()
+
+    # TENTATIVA 1: Ler como UTF-8 (formato dos arquivos consolidados salvos pelo app)
     try:
+        if hasattr(src, "seek"): src.seek(0)
+        df = pd.read_csv(src, sep=';', encoding='utf-8', low_memory=False)
+        if COL_PILOTO in df.columns and COL_VOLTA in df.columns:
+            df[COL_LOCAL], df[COL_EVENTO] = local_nome, evento_nome
+            return normalizar(df)
+    except Exception:
+        pass
+
+    # TENTATIVA 2: Ler como windows-1252 (formato comum de arquivos CSV originais)
+    try:
+        if hasattr(src, "seek"): src.seek(0)
         df = pd.read_csv(src, sep=';', encoding='windows-1252', low_memory=False)
         if COL_PILOTO in df.columns and COL_VOLTA in df.columns:
             df[COL_LOCAL], df[COL_EVENTO] = local_nome, evento_nome
             return normalizar(df)
-    except Exception: pass
+    except Exception:
+        pass
+
+    # TENTATIVA 3: Parser complexo para arquivos CSV separados por vírgula
     try:
-        src.seek(0)
+        if hasattr(src, "seek"): src.seek(0)
         raw = src.getvalue().decode("utf-8", "ignore") if hasattr(src, "getvalue") else open(src, "r", encoding="utf-8", errors="ignore").read()
         lines = [l.strip() for l in raw.splitlines() if l.strip()]
         hdr_index = next(i for i, l in enumerate(lines) if "Lap Tm" in l and "Lap" in l)
@@ -120,7 +137,9 @@ def ler_csv_auto(src, filename=""):
             COL_S2: df_alt.get("S2 Tm"), COL_S3: df_alt.get("S3 Tm"), COL_VEL: df_alt.get("Speed"),
         })
         return normalizar(df_map)
-    except (StopIteration, ValueError, KeyError): return pd.DataFrame()
+    except (StopIteration, ValueError, KeyError): 
+        st.error(f"Não foi possível ler o arquivo '{filename}'. Formato desconhecido.")
+        return pd.DataFrame()
 
 # --- FUNÇÃO PRINCIPAL DA APLICAÇÃO ---
 def main_app():
@@ -145,6 +164,7 @@ def main_app():
             if st.button("Salvar Etapa Consolidada"):
                 if nome_consolidado:
                     caminho_salvar = os.path.join(PASTA_ETAPAS, nome_consolidado)
+                    # Salva com encoding utf-8-sig para compatibilidade com Excel
                     df_completo.to_csv(caminho_salvar, sep=';', index=False, encoding='utf-8-sig')
                     st.success(f"Arquivo '{nome_consolidado}' salvo!")
                 else:
@@ -294,7 +314,6 @@ def main_app():
         else:
             st.info("Nenhum dado para exibir. Verifique os filtros selecionados na barra lateral.")
 
-        # --- CÓDIGO DO MAPA RESTAURADO ---
         st.markdown("---")
         st.subheader("🗺️ Mapa da Pista")
         if 'map_select' in locals() and map_select != "— nenhum —":
@@ -306,7 +325,6 @@ def main_app():
                 st.warning(f"Arquivo do mapa '{map_select}' não encontrado na pasta '{PASTA_MAPAS_IMAGENS}'.")
         else:
             st.info("Selecione um mapa na barra lateral para exibi-lo aqui.")
-        # --- FIM DO CÓDIGO DO MAPA ---
     
     with tabs[1]:
         st.subheader("🏆 Melhor Volta de Cada Piloto")
