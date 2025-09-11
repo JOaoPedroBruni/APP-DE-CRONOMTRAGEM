@@ -6,6 +6,7 @@ import io
 import os
 import re
 from io import StringIO
+import unicodedata
 
 # ---------------- Configuração da Página ----------------
 st.set_page_config(page_title="Plataforma Cronometragem", layout="wide")
@@ -35,7 +36,7 @@ def check_password():
     login_form()
     return False
 
-# --- FUNÇÕES AUXILIARES (SEU CÓDIGO ORIGINAL) ---
+# --- FUNÇÕES AUXILIARES ---
 COL_LOCAL, COL_EVENTO = "Local", "Evento"
 COL_CAT, COL_PILOTO = "CATEGORIA", "Piloto"
 COL_VOLTA, COL_TT = "Volta", "Tempo Total da Volta"
@@ -60,7 +61,7 @@ def fmt_tempo(td):
     n = int(s // 60)
     c = int(s % 60)
     return f"{n:01d}:{c:02d}.{m:03d}"
-    
+
 def formatar_diferenca_html(td_or_float, unit=""):
     if pd.isna(td_or_float): return "<td></td>"
     value = td_or_float.total_seconds() if isinstance(td_or_float, pd.Timedelta) else td_or_float
@@ -103,9 +104,10 @@ def ler_csv_auto(src, filename=""):
             df[COL_LOCAL], df[COL_EVENTO] = local_nome, evento_nome
             return normalizar(df)
     except Exception: pass
-    raw = src.getvalue().decode("utf-8", "ignore") if hasattr(src, "getvalue") else open(src, "r", encoding="utf-8", errors="ignore").read()
-    lines = [l.strip() for l in raw.splitlines() if l.strip()]
     try:
+        src.seek(0)
+        raw = src.getvalue().decode("utf-8", "ignore") if hasattr(src, "getvalue") else open(src, "r", encoding="utf-8", errors="ignore").read()
+        lines = [l.strip() for l in raw.splitlines() if l.strip()]
         hdr_index = next(i for i, l in enumerate(lines) if "Lap Tm" in l and "Lap" in l)
         df_alt = pd.read_csv(StringIO("\n".join(lines[hdr_index:])), sep=',', quotechar='"', engine='python')
         hora_pat = re.compile(r"^\d{1,2}:\d{2}:\d{2}\.\d{1,3}$")
@@ -120,7 +122,7 @@ def ler_csv_auto(src, filename=""):
         return normalizar(df_map)
     except (StopIteration, ValueError, KeyError): return pd.DataFrame()
 
-# --- FUNÇÃO PRINCIPAL DA APLICAÇÃO (MODIFICADA) ---
+# --- FUNÇÃO PRINCIPAL DA APLICAÇÃO ---
 def main_app():
     st.title("🏎️ Plataforma de Cronometragem Multi-Sessão")
     if st.sidebar.button("Logout"):
@@ -128,81 +130,77 @@ def main_app():
         st.rerun()
 
     PASTA_ETAPAS = "etapas_salvas"
-    PASTA_MAPAS = "mapas"
     os.makedirs(PASTA_ETAPAS, exist_ok=True)
-    os.makedirs(PASTA_MAPAS, exist_ok=True)
     
     df_completo = pd.DataFrame()
     
-    # ===== FERRAMENTA DE CONSOLIDAÇÃO (PARA USO LOCAL COM PRÉ-VISUALIZAÇÃO) =====
-    with st.sidebar.expander("⚙️ Ferramenta de Consolidação (Uso Local)"):
-        st.info("Carregue múltiplos arquivos para pré-visualizar e depois salvar como uma etapa única.")
+    with st.sidebar.expander("⚙️ Ferramenta de Consolidação"):
         uploaded_files = st.file_uploader("Carregar múltiplos arquivos CSV", type="csv", accept_multiple_files=True)
-        
-        # Se houver arquivos carregados, eles têm prioridade para visualização
         if uploaded_files:
             st.info("Modo de Pré-visualização: Analisando arquivos recém-carregados.")
             dfs_novos = [ler_csv_auto(f, filename=f.name) for f in uploaded_files]
             df_completo = pd.concat(dfs_novos, ignore_index=True)
-
-            nome_consolidado = st.text_input("Nome do arquivo consolidado final:", "Etapa_Consolidada.csv")
+            
+            nome_consolidado = st.text_input("Nome do arquivo consolidado:", "Etapa_Consolidada.csv")
             if st.button("Salvar Etapa Consolidada"):
                 if nome_consolidado:
                     caminho_salvar = os.path.join(PASTA_ETAPAS, nome_consolidado)
-                    # Salva o mesmo dataframe que está sendo pré-visualizado
                     df_completo.to_csv(caminho_salvar, sep=';', index=False, encoding='utf-8-sig')
-                    st.success(f"Arquivo '{nome_consolidado}' salvo na pasta '{PASTA_ETAPAS}'!")
+                    st.success(f"Arquivo '{nome_consolidado}' salvo!")
                 else:
-                    st.warning("Por favor, defina um nome para o arquivo consolidado.")
+                    st.warning("Defina um nome para o arquivo.")
 
-    # ===== LÓGICA PRINCIPAL PARA ANÁLISE (LÊ DA PASTA SE NÃO HOUVER PRÉ-VISUALIZAÇÃO) =====
     st.sidebar.header("📁 Selecionar Etapa para Análise")
+    arquivos_disponiveis = [f for f in os.listdir(PASTA_ETAPAS) if f.lower().endswith('.csv')]
+    opcoes = ["-- Escolha uma etapa --"] + sorted(arquivos_disponiveis)
+    arquivo_selecionado = st.sidebar.selectbox("Etapas salvas:", opcoes)
 
-    @st.cache_data
-    def carregar_dados_da_pasta(caminho_do_arquivo):
-        return ler_csv_auto(caminho_do_arquivo, filename=os.path.basename(caminho_do_arquivo))
-
-    try:
-        arquivos_disponiveis = [f for f in os.listdir(PASTA_ETAPAS) if f.lower().endswith('.csv')]
-        if not arquivos_disponiveis:
-            st.sidebar.warning(f"Nenhum arquivo .csv encontrado na pasta '{PASTA_ETAPAS}'.")
-        
-        opcoes = ["-- Escolha uma etapa --"] + sorted(arquivos_disponiveis)
-        arquivo_selecionado = st.sidebar.selectbox("Etapas salvas disponíveis:", opcoes)
-
-        # Só carrega do arquivo salvo se NENHUM arquivo estiver sendo pré-visualizado
-        if not uploaded_files and arquivo_selecionado != "-- Escolha uma etapa --":
-            caminho_completo = os.path.join(PASTA_ETAPAS, arquivo_selecionado)
-            with st.spinner(f"Carregando dados de '{arquivo_selecionado}'..."):
-                df_completo = carregar_dados_da_pasta(caminho_completo)
-            st.sidebar.success(f"Analisando: {arquivo_selecionado}")
-
-    except FileNotFoundError:
-        st.error(f"ERRO: A pasta '{PASTA_ETAPAS}' não foi encontrada. Crie-a no seu projeto.")
-        st.stop()
-
-    # Se, após tudo, o dataframe estiver vazio, mostra a mensagem inicial
+    if not uploaded_files and arquivo_selecionado != "-- Escolha uma etapa --":
+        caminho_completo = os.path.join(PASTA_ETAPAS, arquivo_selecionado)
+        df_completo = ler_csv_auto(caminho_completo, filename=arquivo_selecionado)
+    
     if df_completo.empty:
         st.info("⬅️ Selecione uma etapa salva ou carregue novos arquivos para começar a análise.")
         st.stop()
         
-    # ===== SEU CÓDIGO DE FILTROS E ANÁLISE (ORIGINAL E SEM ALTERAÇÕES) =====
-    # A partir daqui, seu código original continua igual, pois ele só depende do `df_completo`
     MAPA_PILOTO = None
-    # ... (O restante do seu código, desde MAPA_PILOTO até o final das abas, continua exatamente igual)
-    # ... cole seu código de análise aqui ...
     for ext in (".csv", ".xlsx"):
         f = f"pilotos_categoria{ext}"
-        if os.path.exists(f): MAPA_PILOTO = f; break
+        if os.path.exists(f):
+            MAPA_PILOTO = f
+            break
+
     if MAPA_PILOTO:
         try:
             mapa = pd.read_excel(MAPA_PILOTO) if MAPA_PILOTO.endswith(".xlsx") else pd.read_csv(MAPA_PILOTO, sep=';', encoding='windows-1252')
-            mapa[COL_PILOTO] = mapa[COL_PILOTO].str.strip()
-            mapa[COL_CAT] = mapa[COL_CAT].str.strip()
-            df_completo = df_completo.drop(columns=[COL_CAT], errors="ignore").merge(mapa[[COL_PILOTO, COL_CAT]], on=COL_PILOTO, how='left')
-            df_completo[COL_CAT].fillna("NÃO CADASTRADO", inplace=True)
-        except Exception as e: st.error(f"Erro ao ler ou mesclar o arquivo de categorias '{MAPA_PILOTO}': {e}")
-    else: df_completo[COL_CAT] = "NÃO CADASTRADO"
+            
+            if len(mapa.columns) >= 2:
+                mapa = mapa.rename(columns={mapa.columns[0]: 'Piloto', mapa.columns[1]: 'CATEGORIA'})
+            
+            if 'Piloto' not in mapa.columns or 'CATEGORIA' not in mapa.columns:
+                st.error(f"ERRO: Seu arquivo Excel '{os.path.basename(MAPA_PILOTO)}' precisa ter pelo menos duas colunas: uma para o piloto e outra para a categoria.")
+                st.stop()
+
+            mapa['CHAVE_JUNCAO'] = mapa['Piloto'].astype(str).str.strip().str.lower()
+            df_completo['CHAVE_JUNCAO'] = df_completo['Piloto'].astype(str).str.strip().str.lower()
+            
+            if 'CATEGORIA' in df_completo.columns:
+                df_completo = df_completo.drop(columns=['CATEGORIA'])
+            
+            df_completo = pd.merge(df_completo, mapa[['CHAVE_JUNCAO', 'CATEGORIA']], on='CHAVE_JUNCAO', how='left')
+            
+            df_completo['CATEGORIA'].fillna("NÃO CADASTRADO", inplace=True)
+            
+            df_completo.drop(columns=['CHAVE_JUNCAO'], inplace=True, errors='ignore')
+
+        except Exception as e:
+            st.error(f"Ocorreu um erro ao processar o arquivo de categorias: {e}")
+            if 'CATEGORIA' not in df_completo.columns:
+                df_completo['CATEGORIA'] = "ERRO AO LER MAPA"
+    else:
+        st.sidebar.warning("Arquivo 'pilotos_categoria.xlsx' (ou .csv) não encontrado na pasta do app.")
+        if 'CATEGORIA' not in df_completo.columns:
+            df_completo['CATEGORIA'] = "ARQUIVO DE MAPA AUSENTE"
 
     st.sidebar.header("🔍 Filtros da Etapa")
     df_final, pilotos_selecionados = pd.DataFrame(), []
@@ -215,21 +213,25 @@ def main_app():
         if ev_selecionado:
             df_filtrado_ev = df_filtrado_loc[df_filtrado_loc[COL_EVENTO] == ev_selecionado]
             categorias_disponiveis = sorted(df_filtrado_ev[COL_CAT].dropna().unique())
-            if not categorias_disponiveis: st.sidebar.warning(f"Nenhuma categoria encontrada para o evento '{ev_selecionado}'.")
+            if not categorias_disponiveis: 
+                st.sidebar.warning("Nenhuma categoria encontrada.")
             cats_selecionadas = st.sidebar.multiselect("Categorias", categorias_disponiveis, default=categorias_disponiveis)
             df = df_filtrado_ev[df_filtrado_ev[COL_CAT].isin(cats_selecionadas)]
             
+            PASTA_MAPAS_IMAGENS = "mapas"
+            if not os.path.exists(PASTA_MAPAS_IMAGENS):
+                os.makedirs(PASTA_MAPAS_IMAGENS)
             EXTS_MAPA = (".png", ".jpg", ".jpeg", ".svg", ".gif")
-            mapas_disp = [f for f in os.listdir(PASTA_MAPAS) if f.lower().endswith(EXTS_MAPA)]
+            mapas_disp = [f for f in os.listdir(PASTA_MAPAS_IMAGENS) if f.lower().endswith(EXTS_MAPA)]
             default_map = "— nenhum —"
             mapa_encontrado = next((f for f in mapas_disp if os.path.splitext(f)[0].lower() == loc_selecionado.lower()), None)
             if mapa_encontrado: default_map = mapa_encontrado
             opcoes_mapa = ["— nenhum —"] + mapas_disp
             map_select = st.sidebar.selectbox("🗺️ Escolher mapa", opcoes_mapa, index=opcoes_mapa.index(default_map))
-            if map_select != "— nenhum —": st.sidebar.image(os.path.join(PASTA_MAPAS, map_select), use_container_width=True)
+            if map_select != "— nenhum —": st.sidebar.image(os.path.join(PASTA_MAPAS_IMAGENS, map_select), use_container_width=True)
             
             pilotos_disponiveis = sorted(df[COL_PILOTO].dropna().unique())
-            pilotos_selecionados = st.sidebar.multiselect("Pilotos", pilotos_disponiveis, default=pilotos_disponiveis[:5])
+            pilotos_selecionados = st.sidebar.multiselect("Pilotos", pilotos_disponiveis, default=pilotos_disponiveis)
             df_final = df[df[COL_PILOTO].isin(pilotos_selecionados)]
             
             if not df_final.empty:
@@ -237,43 +239,65 @@ def main_app():
                 voltas_selecionadas = st.sidebar.multiselect("Voltas", voltas, default=voltas)
                 df_final = df_final[df_final[COL_VOLTA].isin(voltas_selecionadas)].reset_index(drop=True)
 
-    best_lap = df_final[COL_TT].min() if not df_final.empty and COL_TT in df_final else None
-    best_spd = df_final[COL_VEL].max() if not df_final.empty and COL_VEL in df_final else None
-    best_sec = {}
-    if not df_final.empty:
-        for sec in [COL_S1, COL_S2, COL_S3]:
-            if sec in df_final.columns and not df_final[sec].dropna().empty: best_sec[sec] = df_final[sec].min()
-
     st.header(f"Análise: {loc_selecionado} - {ev_selecionado if 'ev_selecionado' in locals() and ev_selecionado else ''}")
     tab_titles = ["Geral", "Volta Rápida", "Velocidade", "Gráficos", "Comparativo Visual", "Histórico", "Exportar"]
     tabs = st.tabs(tab_titles)
 
     with tabs[0]:
         st.subheader("📋 Tabela Completa de Voltas")
+        
         if not df_final.empty:
-            cols_to_show = [COL_PILOTO, COL_CAT, "Horário", COL_VOLTA] + COLS_TEMPO + [COL_VEL]
-            cols_existentes = [col for col in cols_to_show if col in df_final.columns]
-            show_df = df_final[cols_existentes].copy()
-            for c in COLS_TEMPO:
-                if c in show_df.columns: show_df[c] = show_df[c].apply(fmt_tempo)
-            def sty_all(row):
-                original_row = df_final.loc[row.name]
-                styles = pd.Series('', index=row.index)
-                if best_lap and COL_TT in original_row and pd.notna(original_row[COL_TT]) and original_row[COL_TT] == best_lap: styles[COL_TT] = 'color: #00BFFF; font-weight: bold;'
-                for sec_col in [COL_S1, COL_S2, COL_S3]:
-                    if sec_col in original_row and sec_col in best_sec and pd.notna(original_row[sec_col]) and original_row[sec_col] == best_sec[sec_col]: styles[sec_col] = 'background-color: #483D8B; color: white;'
-                if best_spd and COL_VEL in original_row and pd.notna(original_row[COL_VEL]) and original_row[COL_VEL] == best_spd: styles[COL_VEL] = 'background-color: #2E8B57; color: white;'
-                return styles
-            st.dataframe(show_df.style.apply(sty_all, axis=1), hide_index=True, use_container_width=True)
-        else: st.info("Nenhum dado para exibir. Verifique os filtros selecionados.")
-        st.markdown("---")
-        st.subheader("🗺️ Mapa da Pista")
-        if 'map_select' in locals() and map_select != "— nenhum —":
-            map_path = os.path.join(PASTA_MAPAS, map_select)
-            if os.path.exists(map_path): st.image(map_path, use_container_width=True)
-            else: st.warning(f"Arquivo do mapa '{map_select}' não encontrado na pasta '{PASTA_MAPAS}'.")
-        else: st.info("Selecione um mapa na barra lateral para exibi-lo aqui.")
+            pilotos_na_tabela = sorted(df_final[COL_PILOTO].dropna().unique())
+            opcoes_filtro_piloto = ["Todos os Pilotos"] + pilotos_na_tabela
+            piloto_filtrado = st.selectbox(
+                "Visualizar voltas de um piloto específico:",
+                opcoes_filtro_piloto
+            )
 
+            if piloto_filtrado == "Todos os Pilotos":
+                df_tabela_geral = df_final
+            else:
+                df_tabela_geral = df_final[df_final[COL_PILOTO] == piloto_filtrado]
+
+            # --- INÍCIO DA CORREÇÃO ---
+            if not df_tabela_geral.empty:
+                # Calcula os melhores tempos/velocidade com base no que está sendo exibido
+                best_lap_tabela = df_tabela_geral[COL_TT].min()
+                best_spd_tabela = df_tabela_geral[COL_VEL].max()
+                best_sec_tabela = {}
+                for sec in [COL_S1, COL_S2, COL_S3]:
+                    if sec in df_tabela_geral.columns and not df_tabela_geral[sec].dropna().empty:
+                        best_sec_tabela[sec] = df_tabela_geral[sec].min()
+
+                cols_to_show = [COL_PILOTO, COL_CAT, "Horário", COL_VOLTA] + COLS_TEMPO + [COL_VEL]
+                cols_existentes = [col for col in cols_to_show if col in df_tabela_geral.columns]
+                
+                df_para_exibir = df_tabela_geral[cols_existentes]
+
+                def sty_all(row):
+                    styles = pd.Series('', index=row.index)
+                    if pd.notna(best_lap_tabela) and pd.notna(row[COL_TT]) and row[COL_TT] == best_lap_tabela: 
+                        styles[COL_TT] = 'color: #00BFFF; font-weight: bold;'
+                    for sec_col in [COL_S1, COL_S2, COL_S3]:
+                        if sec_col in best_sec_tabela and pd.notna(row[sec_col]) and row[sec_col] == best_sec_tabela[sec_col]: 
+                            styles[sec_col] = 'background-color: #483D8B; color: white;'
+                    if pd.notna(best_spd_tabela) and COL_VEL in row.index and pd.notna(row[COL_VEL]) and row[COL_VEL] == best_spd_tabela: 
+                        styles[COL_VEL] = 'background-color: #2E8B57; color: white;'
+                    return styles
+
+                # Aplica o estilo e a formatação de forma encadeada
+                styler = df_para_exibir.style.apply(sty_all, axis=1)
+                
+                format_dict = {c: fmt_tempo for c in COLS_TEMPO if c in df_para_exibir.columns}
+                styler.format(format_dict)
+                
+                st.dataframe(styler, hide_index=True, use_container_width=True)
+            else:
+                st.info("Nenhum dado para exibir para o piloto selecionado.")
+            # --- FIM DA CORREÇÃO ---
+        else:
+            st.info("Nenhum dado para exibir. Verifique os filtros selecionados na barra lateral.")
+    
     with tabs[1]:
         st.subheader("🏆 Melhor Volta de Cada Piloto")
         if not df_final.empty and COL_TT in df_final and not df_final[COL_TT].dropna().empty:
@@ -283,7 +307,8 @@ def main_app():
             for c in COLS_TEMPO:
                 if c in best_df.columns: best_df[c] = best_df[c].apply(fmt_tempo)
             st.dataframe(best_df, hide_index=True, use_container_width=True)
-        else: st.info("Não há dados de tempo de volta disponíveis para os pilotos selecionados.")
+        else: 
+            st.info("Não há dados de tempo de volta disponíveis.")
 
     with tabs[2]:
         st.subheader("🚀 Maior Top Speed de Cada Piloto")
@@ -295,11 +320,12 @@ def main_app():
             for c in COLS_TEMPO:
                 if c in sp_df.columns: sp_df[c] = sp_df[c].apply(fmt_tempo)
             st.dataframe(sp_df, hide_index=True, use_container_width=True)
-        else: st.info("Não há dados de velocidade disponíveis para os pilotos e voltas selecionados.")
-
+        else: 
+            st.info("Não há dados de velocidade disponíveis.")
+    
     with tabs[3]:
         st.header("📈 Análises Gráficas")
-        if df_final.empty or len(pilotos_selecionados) == 0: st.warning("Selecione pilotos para visualizar os gráficos.")
+        if df_final.empty or not pilotos_selecionados: st.warning("Selecione pilotos para visualizar os gráficos.")
         else:
             if COL_TT in df_final.columns and not df_final[COL_TT].dropna().empty:
                 st.subheader("Comparativo de Tempo por Volta")
@@ -350,7 +376,6 @@ def main_app():
                     st.error(f"Não foi possível criar a tabela de comparação. Erro: {e}")
                     st.stop()
                 
-                # A variável 'unidade' é definida aqui
                 unidade = "" if tipo_analise == "Tempo de Volta" else "km/h"
                 y_label = "Tempo de Volta (M:SS)" if tipo_analise == "Tempo de Volta" else f"Velocidade Máxima ({unidade})"
 
@@ -406,10 +431,10 @@ def main_app():
                                 is_best = best_values.get(p) and pd.notna(dado_atual) and dado_atual == best_values.get(p)
                                 cell_class = "best-value" if is_best else ""
                                 valor_str = fmt_tempo(dado_atual) if tipo_analise == "Tempo de Volta" else (f"{dado_atual:.1f}" if pd.notna(dado_atual) else "---")
-                                html += f"<td class='{cell_class}'><b>{int(row[COL_VOLTA])}</b><br>{valor_str} {unidade}</td>" # CORRIGIDO
+                                html += f"<td class='{cell_class}'><b>{int(row[COL_VOLTA])}</b><br>{valor_str} {unidade}</td>"
                                 if i < len(header_pilotos) - 1:
                                     dado_prox = row.get(header_pilotos[i+1])
-                                    diff = dado_prox - dado_atual if pd.notna(dado_atual) and pd.notna(dado_prox) else None
+                                    diff = dado_prox - dado_atual if pd.notna(dado_atual) and pd.notna(dado_prox) else pd.NaT
                                     html += formatar_diferenca_html(diff, unit=unidade)
                         else:
                             dado_ref = row.get(piloto_referencia)
@@ -417,16 +442,16 @@ def main_app():
                                 dado_atual = row.get(p)
                                 diff_str = ""
                                 if p != piloto_referencia:
-                                    diff = dado_atual - dado_ref if pd.notna(dado_atual) and pd.notna(dado_ref) else None
-                                    diff_str = f"<span class='diff-span'>{formatar_diff_span(diff, unit=unidade)}</span>" # CORRIGIDO
+                                    diff = dado_atual - dado_ref if pd.notna(dado_atual) and pd.notna(dado_ref) else pd.NaT
+                                    diff_str = f"<span class='diff-span'>{formatar_diff_span(diff, unit=unidade)}</span>"
                                 is_best = best_values.get(p) and pd.notna(dado_atual) and dado_atual == best_values.get(p)
                                 cell_class = "best-value" if is_best else ""
                                 valor_str = fmt_tempo(dado_atual) if tipo_analise == "Tempo de Volta" else (f"{dado_atual:.1f}" if pd.notna(dado_atual) else "---")
-                                html += f"<td class='{cell_class}'><b>{int(row[COL_VOLTA])}</b><br>{valor_str} {unidade}{diff_str}</td>" # CORRIGIDO
+                                html += f"<td class='{cell_class}'><b>{int(row[COL_VOLTA])}</b><br>{valor_str} {unidade}{diff_str}</td>"
                         html += "</tr>"
                 html += "</tbody></table></div>"
                 st.markdown(html, unsafe_allow_html=True)
-    
+
     with tabs[5]:
         st.subheader("🗂️ Histórico de Etapas Salvas")
         files_in_folder = sorted(os.listdir(PASTA_ETAPAS))
@@ -443,7 +468,6 @@ def main_app():
             with pd.ExcelWriter(buf, engine='xlsxwriter') as w: out.to_excel(w, index=False)
             st.download_button("⬇️ Baixar Excel", buf.getvalue(), file_name=f"cronometro_{loc_selecionado or 'local'}_{ev_selecionado or 'evento'}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         else: st.info("Não há dados filtrados para exportar.")
-
 
 # --- PONTO DE ENTRADA PRINCIPAL ---
 if check_password():
