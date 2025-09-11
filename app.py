@@ -259,9 +259,7 @@ def main_app():
             else:
                 df_tabela_geral = df_final[df_final[COL_PILOTO] == piloto_filtrado]
 
-            # --- INÍCIO DA CORREÇÃO ---
             if not df_tabela_geral.empty:
-                # Calcula os melhores tempos/velocidade com base no que está sendo exibido
                 best_lap_tabela = df_tabela_geral[COL_TT].min()
                 best_spd_tabela = df_tabela_geral[COL_VEL].max()
                 best_sec_tabela = {}
@@ -285,7 +283,6 @@ def main_app():
                         styles[COL_VEL] = 'background-color: #2E8B57; color: white;'
                     return styles
 
-                # Aplica o estilo e a formatação de forma encadeada
                 styler = df_para_exibir.style.apply(sty_all, axis=1)
                 
                 format_dict = {c: fmt_tempo for c in COLS_TEMPO if c in df_para_exibir.columns}
@@ -294,9 +291,22 @@ def main_app():
                 st.dataframe(styler, hide_index=True, use_container_width=True)
             else:
                 st.info("Nenhum dado para exibir para o piloto selecionado.")
-            # --- FIM DA CORREÇÃO ---
         else:
             st.info("Nenhum dado para exibir. Verifique os filtros selecionados na barra lateral.")
+
+        # --- CÓDIGO DO MAPA RESTAURADO ---
+        st.markdown("---")
+        st.subheader("🗺️ Mapa da Pista")
+        if 'map_select' in locals() and map_select != "— nenhum —":
+            PASTA_MAPAS_IMAGENS = "mapas"
+            map_path = os.path.join(PASTA_MAPAS_IMAGENS, map_select)
+            if os.path.exists(map_path):
+                st.image(map_path, use_container_width=True)
+            else:
+                st.warning(f"Arquivo do mapa '{map_select}' não encontrado na pasta '{PASTA_MAPAS_IMAGENS}'.")
+        else:
+            st.info("Selecione um mapa na barra lateral para exibi-lo aqui.")
+        # --- FIM DO CÓDIGO DO MAPA ---
     
     with tabs[1]:
         st.subheader("🏆 Melhor Volta de Cada Piloto")
