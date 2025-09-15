@@ -248,6 +248,7 @@ def main_app():
             "ET5": "Algarve.png", "25ET5": "Algarve.png",
             "ET4": "Algarve.png", "25ET4": "Algarve.png",
             "ETX":"Velocitta.png", "25ETX": "Velocitta.png",
+            "ET51":"Velocitta.png", "25ET51": "Velocitta.png",
             "ET8": "Interlagos.png", "25ET8": "Interlagos.png",
             "ET9": "Interlagos.png", "25ET9": "Interlagos.png",
             "ET3": "Interlagos.png", "25ET3": "Interlagos.png",

@@ -1,73 +1,144 @@
-Piloto;SUBCATEGORIA
-111 - Neto CARLONI - TROPHY;TROPHY
-12 - Pedro VILLELA - TROPHY;TROPHY
-121 - Denis FERRER - TROPHY;TROPHY
-10 - Nicholas GARFINKEL - TROPHY;TROPHY
-3 - Gabriel GUPER - SPORT;SPORT
-777 - Lucas LUCCO - SPORT;SPORT
-1 - Gustavo COSTA - SPORT;SPORT
-5 - Guilherme FIGUEIREDO - SPORT;SPORT
-22 - Eldo UMBELINO - SPORT;SPORT
-7 - Adriano VALVERDE - SPORT;SPORT
-11 - Paulo REALES - SPORT;SPORT
-51 - Rodrigo ARRUY - SPORT;SPORT
-45 - Luis E. LOPES - SPORT;SPORT
-13 - LetÃƒÂ­cia BUFONI - TROPHY;TROPHY
-84 - FabrÃƒÂ­cio SIMÃƒÂ•ES - SPORT;SPORT
-911 - Paulo MUZY - SPORT;SPORT
-331 - Neto HEIL - TROPHY;TROPHY
-72 - Sergio LAURENTYS - TROPHY;TROPHY
-32 - Matheus Roque - CHA S;CHALLENGE SPORT
-177 - Lucas Locatelli - CHA S;CHALLENGE SPORT
-58 - Cláudio Simão - CHA R;CHALLENGE ROOKIE
-22 - Caio CASTRO - CHA;CHALLENGE
-66 - Sadak Leite - CHA;CHALLENGE
-45 - Jose Moura Neto - CHA S;CHALLENGE SPORT
-21 - Daniel Neumann - CHA R;CHALLENGE ROOKIE
-54 - Caio Chaves - CHA;CHALLENGE
-82 - Gerson CAMPOS - CHA;CHALLENGE
-77 - Mario Delara - CHA S;CHALLENGE SPORT
-5 - George Crispim - CHA S;CHALLENGE SPORT
-33 - William Araujo - CHA R;CHALLENGE ROOKIE
-7 - Luiz SOUZA - CHA S;CHALLENGE SPORT
-23 - Leonardo Herrmann - CHA;CHALLENGE
-98 - Cecília Rabelo - CHA S;CHALLENGE SPORT
-99 - Claudio Reina - CHA R;CHALLENGE ROOKIE
-2 - Rafa Brocchi - CHA R;CHALLENGE ROOKIE
-14 - André GAIDZINSKI - CHA S;CHALLENGE SPORT
-46 - Fabián TARABORELLI - CHA S;CHALLENGE SPORT
-100 - Raphael BERNARDES - CHA R;CHALLENGE ROOKIE
-129 - Fernando Arruda - CHA R;CHALLENGE ROOKIE
-18 - Ricardo Zylberman - CHA R;CHALLENGE ROOKIE
-118 - Matheus COMPARATTO - CAR;CARRERA
-544 - Marçal Müller - CAR;CARRERA
-27 - Josimar JUNIOR - CAR S;CARRERA SPORT
-33 - Bruno Campos - CAR R;CARRERA ROOKIE
-10 - Thiago Vivacqua - CAR;CARRERA
-7 - Miguel Paludo - CAR;CARRERA
-38 - Eric SANTOS - CAR R;CARRERA ROOKIE
-2 - Silvio Morestoni - CAR R;CARRERA ROOKIE
-72 - Antonella Bassani - CAR;CARRERA
-26 - Christian HAHN - CAR;CARRERA
-83 - Marco Billi - CAR S;CARRERA SPORT
-21 - Miguel Mariotti - CAR S;CARRERA SPORT
-95 - Alceu FELDMANN NETO - CAR S;CARRERA SPORT
-51 - Israel Salmen - CAR S;CARRERA SPORT
-30 - Cristian Mohr - CAR S;CARRERA SPORT
-199 - Nelson Marcondes - CAR S;CARRERA SPORT
-70 - Lucas SALLES - CAR;CARRERA
-99 - Wagner Pontes - CAR R;CARRERA ROOKIE
-77 - Francisco Horta - CAR S;CARRERA SPORT
-888 - Lineu Pires - CAR S;CARRERA SPORT
-80 - Rouman Ziemkiewicz - CAR S;CARRERA SPORT
-17 - Marcos Regadas - CAR S;CARRERA SPORT
-15 - Leonardo SANCHEZ - CAR R;CARRERA ROOKIE
-29 - Rodrigo MELLO - CAR S;CARRERA SPORT
-14 - Carlos Campos ( M ) - CAR S;CARRERA SPORT
-87 - Nelson Monteiro ( M ) - CAR S;CARRERA SPORT
-24 - Gustavo Zanon - CAR S;CARRERA SPORT
-100 - Sebá Malucelli - CAR S;CARRERA SPORT
-85 - Eduardo Menossi - CAR R;CARRERA ROOKIE
-166 - Miguel Caetano - CAR R;CARRERA ROOKIE
-12 - Marco Pisani - CAR R;CARRERA ROOKIE
-11 - Flávio Sampaio - CAR R;CARRERA ROOKIE
+Piloto;SUBCATEGORIA;;;;;
+111 - Neto CARLONI - TROPHY;TROPHY;;;;;
+12 - Pedro VILLELA - SPORT;TROPHY SPORT;;;;;
+12 - Pedro VILLELA - TROPHY;TROPHY;;;;;
+121 - Denis FERRER - TROPHY;TROPHY;;;;;
+10 - Nicholas GARFINKEL - SPORT;TROPHY SPORT;;;;;
+10 - Nicholas GARFINKEL - TROPHY;TROPHY;;;;;
+3 - Gabriel GUPER - SPORT;TROPHY SPORT;;;;;
+777 - Lucas LUCCO - TROPHY;TROPHY;;;;;
+777 - Lucas LUCCO - SPORT;TROPHY SPORT;;;;;
+1 - Gustavo COSTA - TROPHY;TROPHY;;;;;
+1 - Gustavo COSTA - SPORT;TROPHY SPORT;;;;;
+5 - Guilherme FIGUEIREDO - SPORT;TROPHY SPORT;;;;;
+22 - Eldo UMBELINO - SPORT;TROPHY SPORT;;;;;
+7 - Adriano VALVERDE - SPORT;TROPHY SPORT;;;;;
+11 - Paulo REALES - SPORT;TROPHY SPORT;;;;;
+51 - Rodrigo ARRUY - SPORT;TROPHY SPORT;;;;;
+45 - Luis E. LOPES - SPORT;TROPHY SPORT;;;;;
+13 - Leticia BUFONI - TROPHY;TROPHY;;;;;
+84 - Fabricio SIMOES - TROPHY;TROPHY;;;;;
+84 - Fabricio SIMOES - SPORT;TROPHY SPORT;;;;;
+911 - Paulo MUZY - SPORT;TROPHY SPORT;;;;;
+331 - Neto HEIL - TROPHY;TROPHY;;;;;
+72 - Sergio LAURENTYS - SPORT;TROPHY SPORT;;;;;
+72 - Sergio LAURENTYS - TROPHY;TROPHY;;;;;
+32 - Matheus Roque - CHA S;CHALLENGE SPORT;;;;;
+177 - Lucas Locatelli - CHA S;CHALLENGE SPORT;;;;;
+58 - Cláudio Simão - CHA R;CHALLENGE ROOKIE;;;;;
+22 - Caio CASTRO - CHA;CHALLENGE;;;;;
+66 - Sadak Leite - CHA;CHALLENGE;;;;;
+45 - Jose Moura Neto - CHA R;CHALLENGE ROOKIE;;;;;
+45 - Jose Moura Neto - CHA S;CHALLENGE SPORT;;;;;
+21 - Daniel Neumann - CHA R;CHALLENGE ROOKIE;;;;;
+54 - Caio Chaves - CHA;CHALLENGE;;;;;
+82 - Gerson CAMPOS - CHA;CHALLENGE;;;;;
+77 - Mario Delara - CHA S;CHALLENGE SPORT;;;;;
+5 - George FILHO - CHA S;CHALLENGE SPORT;;;;;
+5 - George Crispim - CHA S;CHALLENGE SPORT;;;;;
+33 - William Araujo - CHA R;CHALLENGE ROOKIE;;;;;
+7 - Luiz SOUZA - CHA S;CHALLENGE SPORT;;;;;
+23 - Leonardo Herrmann - CHA;CHALLENGE;;;;;
+98 - Cecília Rabelo - CHA S;CHALLENGE SPORT;;;;;
+99 - Claudio Reina - CHA R;CHALLENGE ROOKIE;;;;;
+2 - Rafa Brocchi - CHA R;CHALLENGE ROOKIE;;;;;
+14 - André GAIDZINSKI - CHA S;CHALLENGE SPORT;;;;;
+46 - Fabián TARABORELLI - CHA S;CHALLENGE SPORT;;;;;
+100 - Raphael BERNARDES - CHA R;CHALLENGE ROOKIE;;;;;
+129 - Fernando Arruda - CHA R;CHALLENGE ROOKIE;;;;;
+18 - Ricardo Zylberman - CHA R;CHALLENGE ROOKIE;;;;;
+118 - Matheus COMPARATTO - CAR;CARRERA;;;;;
+544 - Marçal Müller - CAR;CARRERA;;;;;
+27 - Josimar JUNIOR - CAR S;CARRERA SPORT;;;;;
+33 - Bruno Campos - CAR R;CARRERA ROOKIE;;;;;
+10 - Thiago Vivacqua - CAR;CARRERA;;;;;
+7 - Miguel Paludo - CAR;CARRERA;;;;;
+38 - Eric SANTOS - CAR R;CARRERA ROOKIE;;;;;
+2 - Silvio Morestoni - CAR R;CARRERA ROOKIE;;;;;
+72 - Antonella Bassani - CAR;CARRERA;;;;;
+26 - Christian HAHN - CAR;CARRERA;;;;;
+83 - Marco Billi - CAR S;CARRERA SPORT;;;;;
+21 - Miguel Mariotti - CAR S;CARRERA SPORT;;;;;
+95 - Alceu FELDMANN NETO - CAR S;CARRERA SPORT;;;;;
+51 - Israel Salmen - CAR S;CARRERA SPORT;;;;;
+30 - Cristian Mohr - CAR S;CARRERA SPORT;;;;;
+199 - Nelson Marcondes - CAR S;CARRERA SPORT;;;;;
+70 - Lucas SALLES - CAR;CARRERA;;;;;
+99 - Wagner Pontes - CAR R;CARRERA ROOKIE;;;;;
+77 - Francisco Horta - CAR S;CARRERA SPORT;;;;;
+888 - Lineu Pires - CAR S;CARRERA SPORT;;;;;
+80 - Rouman Ziemkiewicz - CAR S;CARRERA SPORT;;;;;
+17 - Marcos Regadas - CAR S;CARRERA SPORT;;;;;
+15 - Leonardo SANCHEZ - CAR R;CARRERA ROOKIE;;;;;
+29 - Rodrigo MELLO - CAR S;CARRERA SPORT;;;;;
+14 - Carlos Campos - CAR S;CARRERA SPORT;;;;;
+87 - Nelson Monteiro - CAR S;CARRERA SPORT;;;;;
+14 - Carlos Campos ( M ) - CAR S;CARRERA SPORT;;;;;
+87 - Nelson Monteiro ( M ) - CAR S;CARRERA SPORT;;;;; 
+24 - Gustavo Zanon - CAR S;CARRERA SPORT;;;;;
+100 - Sebá Malucelli - CAR S;CARRERA SPORT;;;;;
+85 - Eduardo Menossi - CAR R;CARRERA ROOKIE;;;;;
+166 - Miguel Caetano - CAR R;CARRERA ROOKIE;;;;;
+12 - Marco Pisani - CAR R;CARRERA ROOKIE;;;;;
+11 - Flávio Sampaio - CAR R;CARRERA ROOKIE;;;;;
+1 - Alceu FELDMANN - CAR S;CARRERA SPORT;;;;;
+1 - Alceu FELDMANN  ( M ) - CAR S;CARRERA SPORT;;;;;
+9 - Edu GUEDES - CAR R;CARRERA ROOKIE;;;;;
+9 - Edu GUEDES ( M ) - CAR R;CARRERA ROOKIE;;;;;
+25 - Paulo SOUSA - CAR R;CARRERA SPORT;;;;;
+25 - Paulo SOUSA ( M ) - CAR R;CARRERA SPORT;;;;;
+444 - Markenson MARQUES - CHA S;CHALLENGE SPORT;;;;;
+88 - Alex FONSECA - SPORT;TROPHY SPORT;;;;;
+45 - José M. JUNIOR - SPORT;TROPHY SPORT;;;;;
+15 - Marco MASCARI - SPORT;TROPHY SPORT;;;;;
+27 - Nilson JOCIONIS - SPORT;TROPHY SPORT;;;;;
+36 - Heverton CARDOSO - CHA R;CHALLENGE ROOKIE;;;;;
+;;;;;;
+;;;;;;
+ENDURANCE ;;;;;;
+544 - M.Müller / F.Fraga - CAR;CARRERA;;;;;
+118 - M. Comparatto / A. Leist - CAR;CARRERA;;;;;
+7 - M.Paludo / A.Hellmeister - CAR;CARRERA;;;;;
+70 - L.Salles / R.Suzuki - CAR;CARRERA;;;;;
+88 - P.Boesel / L.Zendeli - CAR;CARRERA;;;;;
+100 - S. Malucelli / M.Gomes - CAR S;CARRERA SPORT;;;;;
+80 - R.Ziemkiewicz / N.Piquet Jr - CAR S;CARRERA SPORT;;;;;
+33 - A.Bassani / N.Costa - CAR;CARRERA;;;;;
+12 - M.Pisani / R.Guerra - CAR R;CARRERA ROOKIE;;;;;
+87 - N.Monteiro / T.Camilo - CAR S;CARRERA SPORT;;;;;
+85 - E.Menossi / L.Reis - CAR R;CARRERA ROOKIE;;;;;
+27 - J.Junior / S.Ramalho - CAR S;CARRERA SPORT;;;;;
+77 - F.Horta / W.Freire - CAR S;CARRERA SPORT;;;;;
+911 - S.Morestoni / J.Giassi - CAR R;CARRERA ROOKIE;;;;;
+14 - C.Campos / T.Vivacqua - CAR S;CARRERA SPORT;;;;;
+22 - C.Castro / D.Dirani - CAR S;CARRERA SPORT;;;;;
+38 - E.Santos / G.Robe - CAR R;CARRERA ROOKIE;;;;;
+25 - P.Sousa / G.Osman - CAR R;CARRERA ROOKIE;;;;;
+45 - J.M.Neto / M.Iorio - CHA S;CHALLENGE SPORT;;;;;
+55 - C.Ruiz / C.Ruiz Jr. - CHA R;CHALLENGE ROOKIE;;;;;
+2 - L.Souza / B.Bonifacio - CHA S;CHALLENGE SPORT;;;;;
+999 - C.Reina / J.Gonçalves - CHA R;CHALLENGE ROOKIE;;;;;
+15 - R.Martins / L.Sanchez - CAR R;CARRERA ROOKIE;;;;;
+11 - F.Sampaio / B.Pinheiro - CAR R;CARRERA ROOKIE;;;;;
+21 - D.Neumann / G.Bandeira - CHA R;CHALLENGE ROOKIE;;;;;
+83 - Mar.Billi / Mau.Billi - CAR R;CARRERA ROOKIE;;;;;
+74 - P.Cifali / A.Bragantini Jr. - CAR R;CARRERA ROOKIE;;;;;
+246 - R.Brocchi / V.Genz - CHA R;CHALLENGE ROOKIE;;;;;
+98 - C.Rabelo / P.Rimbano - CHA S;CHALLENGE SPORT;;;;;
+66 - S.Leite / F.Carbone - CHA;CHALLENGE;;;;;
+23 - L.Herrmann / V.Baptista - CHA;CHALLENGE;;;;;
+99 - W.Pontes / R.Reis - CAR R;CARRERA ROOKIE;;;;;
+17 - R.Mello / M.Regadas - CAR S;CARRERA SPORT;;;;;
+888 - L.Pires / B.Gresse - CAR S;CARRERA SPORT;;;;;
+15 - L.Sanchez / R.Martins - CAR R;CARRERA ROOKIE;;;;;
+2 - B.Bonifacio / L.Souza - CHA S;CHALLENGE SPORT;;;;;
+118 - M.Comparatto / M.Ferreira - CAR;CARRERA;;;;;
+95 - A.Feldmann Neto / G.Casagrande - CAR S;CARRERA SPORT;;;;;
+33 - B.Campos / N.Costa - CAR R;CARRERA ROOKIE;;;;;
+13 - B.Sousa / A.Felix da Costa - CAR;CARRERA;;;;;
+22 - C.Castro / D.Dirani - CHA;CHALLENGE;;;;;
+21 - D.Neumann / G.Bandeira D.NEUMANN / G.Bandeira - CHA R;CARRERA ROOKIE;;;;;
+166 - M.Caetano / J.Posser - CAR R;CARRERA ROOKIE;;;;;
+17 - M.Regadas / R.Mello - CAR S;CARRERA SPORT;;;;;
+83 - Mar.Billi / G.di Mauro - CAR S;CARRERA SPORT;;;;;
+88 - P.Boesel / E.Fittipaldi - CAR;CARRERA;;;;;
